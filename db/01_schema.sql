@@ -115,3 +115,31 @@ CREATE TABLE prescription_item (
     duration_days   INT NOT NULL,
     quantity        INT NOT NULL CHECK (quantity > 0)
 );
+
+CREATE TABLE drug_interaction (
+    drug_a_id        INT NOT NULL
+                     REFERENCES drug(drug_id) ON DELETE RESTRICT,
+    drug_b_id        INT NOT NULL
+                     REFERENCES drug(drug_id) ON DELETE RESTRICT,
+    severity         VARCHAR(20) NOT NULL,
+    mechanism        TEXT NOT NULL,
+    clinical_effect  TEXT NOT NULL,
+    reference_source TEXT,
+    PRIMARY KEY (drug_a_id, drug_b_id),
+    CONSTRAINT drug_interaction_order_check
+        CHECK (drug_a_id < drug_b_id)
+);
+
+CREATE TABLE interaction_alert (
+    alert_id           SERIAL PRIMARY KEY,
+    item_id            INT NOT NULL
+                       REFERENCES prescription_item(item_id) ON DELETE RESTRICT,
+    conflicting_item_id INT NOT NULL
+                       REFERENCES prescription_item(item_id) ON DELETE RESTRICT,
+    severity           VARCHAR(20) NOT NULL,
+    message            TEXT NOT NULL,
+    raised_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    acknowledged_by   INT
+                       REFERENCES user_account(user_id) ON DELETE RESTRICT,
+    acknowledged_at   TIMESTAMPTZ
+);
