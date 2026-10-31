@@ -210,3 +210,19 @@ CREATE TABLE audit_log (
     details JSONB,
     occurred_at TIMESTAMPTZ DEFAULT now()
 );
+
+CREATE INDEX idx_ade_narrative_vec
+    ON ade_report USING hnsw (narrative_vec vector_cosine_ops);
+
+CREATE INDEX idx_ade_narrative_tsv
+    ON ade_report USING gin (narrative_tsv);
+
+CREATE INDEX idx_appt_doctor_slot
+    ON appointment (doctor_id, slot_start);
+
+CREATE INDEX idx_item_drug
+    ON prescription_item (drug_id);
+
+CREATE INDEX idx_appt_status
+    ON appointment (status)
+    WHERE status IN ('booked', 'confirmed');
