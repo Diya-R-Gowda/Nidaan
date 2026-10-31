@@ -73,3 +73,45 @@ CREATE TABLE appointment (
             (mode = 'in_person' AND meeting_link IS NULL)
         )
 );
+
+CREATE TABLE consultation (
+    consultation_id SERIAL PRIMARY KEY,
+    appointment_id  INT NOT NULL UNIQUE
+                    REFERENCES appointment(appointment_id) ON DELETE RESTRICT,
+    chief_complaint TEXT NOT NULL,
+    notes           TEXT,
+    diagnosis       TEXT,
+    started_at      TIMESTAMPTZ,
+    ended_at        TIMESTAMPTZ
+);
+
+CREATE TABLE drug (
+    drug_id     SERIAL PRIMARY KEY,
+    drug_name   VARCHAR(160) NOT NULL,
+    generic_name VARCHAR(160) NOT NULL,
+    drug_class  VARCHAR(120) NOT NULL,
+    form        VARCHAR(60) NOT NULL,
+    strength    VARCHAR(60) NOT NULL,
+    unit_price  NUMERIC(10, 2) NOT NULL CHECK (unit_price >= 0),
+    is_active   BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE prescription (
+    prescription_id SERIAL PRIMARY KEY,
+    consultation_id  INT NOT NULL
+                     REFERENCES consultation(consultation_id) ON DELETE RESTRICT,
+    issued_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    notes            TEXT
+);
+
+CREATE TABLE prescription_item (
+    item_id         SERIAL PRIMARY KEY,
+    prescription_id INT NOT NULL
+                    REFERENCES prescription(prescription_id) ON DELETE RESTRICT,
+    drug_id         INT NOT NULL
+                    REFERENCES drug(drug_id) ON DELETE RESTRICT,
+    dose            VARCHAR(120) NOT NULL,
+    frequency       VARCHAR(120) NOT NULL,
+    duration_days   INT NOT NULL,
+    quantity        INT NOT NULL CHECK (quantity > 0)
+);
