@@ -74,6 +74,78 @@ CREATE TABLE appointment (
         )
 );
 
+CREATE TABLE consultation (
+    consultation_id SERIAL PRIMARY KEY,
+    appointment_id  INT NOT NULL UNIQUE
+                    REFERENCES appointment(appointment_id) ON DELETE RESTRICT,
+    chief_complaint TEXT NOT NULL,
+    notes           TEXT,
+    diagnosis       TEXT,
+    started_at      TIMESTAMPTZ,
+    ended_at        TIMESTAMPTZ
+);
+
+CREATE TABLE drug (
+    drug_id     SERIAL PRIMARY KEY,
+    drug_name   VARCHAR(160) NOT NULL,
+    generic_name VARCHAR(160) NOT NULL,
+    drug_class  VARCHAR(120) NOT NULL,
+    form        VARCHAR(60) NOT NULL,
+    strength    VARCHAR(60) NOT NULL,
+    unit_price  NUMERIC(10, 2) NOT NULL CHECK (unit_price >= 0),
+    is_active   BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE prescription (
+    prescription_id SERIAL PRIMARY KEY,
+    consultation_id  INT NOT NULL
+                     REFERENCES consultation(consultation_id) ON DELETE RESTRICT,
+    issued_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    notes            TEXT
+);
+
+CREATE TABLE prescription_item (
+    item_id         SERIAL PRIMARY KEY,
+    prescription_id INT NOT NULL
+                    REFERENCES prescription(prescription_id) ON DELETE RESTRICT,
+    drug_id         INT NOT NULL
+                    REFERENCES drug(drug_id) ON DELETE RESTRICT,
+    dose            VARCHAR(120) NOT NULL,
+    frequency       VARCHAR(120) NOT NULL,
+    duration_days   INT NOT NULL,
+    quantity        INT NOT NULL CHECK (quantity > 0)
+);
+
+CREATE TABLE drug_interaction (
+    drug_a_id        INT NOT NULL
+                     REFERENCES drug(drug_id) ON DELETE RESTRICT,
+    drug_b_id        INT NOT NULL
+                     REFERENCES drug(drug_id) ON DELETE RESTRICT,
+    severity         VARCHAR(20) NOT NULL,
+    mechanism        TEXT NOT NULL,
+    clinical_effect  TEXT NOT NULL,
+    reference_source TEXT,
+    PRIMARY KEY (drug_a_id, drug_b_id),
+    CONSTRAINT drug_interaction_order_check
+        CHECK (drug_a_id < drug_b_id)
+);
+
+CREATE TABLE interaction_alert (
+    alert_id           SERIAL PRIMARY KEY,
+    item_id            INT NOT NULL
+                       REFERENCES prescription_item(item_id) ON DELETE RESTRICT,
+    conflicting_item_id INT NOT NULL
+                       REFERENCES prescription_item(item_id) ON DELETE RESTRICT,
+    severity           VARCHAR(20) NOT NULL,
+    message            TEXT NOT NULL,
+    raised_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    acknowledged_by   INT
+                       REFERENCES user_account(user_id) ON DELETE RESTRICT,
+    acknowledged_at   TIMESTAMPTZ
+);
+
+
+
 CREATE TABLE reminder_queue (
     reminder_id SERIAL PRIMARY KEY,
     appointment_id INT NOT NULL
@@ -85,6 +157,8 @@ CREATE TABLE reminder_queue (
     status VARCHAR(20),
     attempts INT
 );
+
+
 
 CREATE TABLE audit_log (
     log_id SERIAL PRIMARY KEY,
