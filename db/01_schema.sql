@@ -73,3 +73,26 @@ CREATE TABLE appointment (
             (mode = 'in_person' AND meeting_link IS NULL)
         )
 );
+
+CREATE TABLE reminder_queue (
+    reminder_id SERIAL PRIMARY KEY,
+    appointment_id INT NOT NULL
+        REFERENCES appointment(appointment_id) ON DELETE RESTRICT,
+    recipient_type VARCHAR(20),
+    channel VARCHAR(20),
+    scheduled_for TIMESTAMPTZ,
+    sent_at TIMESTAMPTZ,
+    status VARCHAR(20),
+    attempts INT
+);
+
+CREATE TABLE audit_log (
+    log_id SERIAL PRIMARY KEY,
+    actor_user_id INT
+        REFERENCES user_account(user_id) ON DELETE RESTRICT,
+    action VARCHAR(100),
+    entity_type VARCHAR(100),
+    entity_id INT,
+    details JSONB,
+    occurred_at TIMESTAMPTZ DEFAULT now()
+);
