@@ -143,3 +143,70 @@ CREATE TABLE interaction_alert (
                        REFERENCES user_account(user_id) ON DELETE RESTRICT,
     acknowledged_at   TIMESTAMPTZ
 );
+
+CREATE TABLE ade_report (
+    report_id SERIAL PRIMARY KEY,
+    patient_id INT NOT NULL
+        REFERENCES patient(patient_id) ON DELETE RESTRICT,
+    item_id INT
+        REFERENCES prescription_item(item_id) ON DELETE RESTRICT,
+    narrative TEXT NOT NULL
+        CHECK (char_length(narrative) >= 20),
+    narrative_tsv TSVECTOR GENERATED ALWAYS AS
+        (to_tsvector('english', narrative)) STORED,
+    narrative_vec VECTOR(384),
+    onset_date DATE NOT NULL,
+    reported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    reported_by INT NOT NULL
+        REFERENCES user_account(user_id) ON DELETE RESTRICT,
+    severity_score NUMERIC(4, 2),
+    status VARCHAR(20)
+        CHECK (status IN ('new', 'under_review', 'confirmed', 'dismissed'))
+);
+
+CREATE TABLE invoice (
+    invoice_id SERIAL PRIMARY KEY,
+    consultation_id INT NOT NULL UNIQUE
+        REFERENCES consultation(consultation_id) ON DELETE RESTRICT,
+    issued_by INT NOT NULL
+        REFERENCES user_account(user_id) ON DELETE RESTRICT,
+    subtotal NUMERIC(10, 2),
+    tax_amount NUMERIC(10, 2),
+    total NUMERIC(10, 2),
+    status VARCHAR(20),
+    issued_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE invoice_line (
+    line_id SERIAL PRIMARY KEY,
+    invoice_id INT NOT NULL
+        REFERENCES invoice(invoice_id) ON DELETE RESTRICT,
+    line_type VARCHAR(30),
+    description TEXT,
+    quantity INT CHECK (quantity > 0),
+    unit_price NUMERIC(10, 2) CHECK (unit_price >= 0),
+    line_total NUMERIC(10, 2)
+);
+
+CREATE TABLE reminder_queue (
+    reminder_id SERIAL PRIMARY KEY,
+    appointment_id INT NOT NULL
+        REFERENCES appointment(appointment_id) ON DELETE RESTRICT,
+    recipient_type VARCHAR(20),
+    channel VARCHAR(20),
+    scheduled_for TIMESTAMPTZ,
+    sent_at TIMESTAMPTZ,
+    status VARCHAR(20),
+    attempts INT
+);
+
+CREATE TABLE audit_log (
+    log_id SERIAL PRIMARY KEY,
+    actor_user_id INT
+        REFERENCES user_account(user_id) ON DELETE RESTRICT,
+    action VARCHAR(100),
+    entity_type VARCHAR(100),
+    entity_id INT,
+    details JSONB,
+    occurred_at TIMESTAMPTZ DEFAULT now()
+);
