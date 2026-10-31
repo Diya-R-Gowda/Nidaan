@@ -41,3 +41,35 @@ CREATE TABLE patient_allergy (
     noted_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (patient_id, substance)
 );
+
+CREATE TABLE appointment (
+    appointment_id SERIAL PRIMARY KEY,
+    patient_id INT NOT NULL
+        REFERENCES patient(patient_id) ON DELETE RESTRICT,
+    doctor_id INT NOT NULL
+        REFERENCES doctor(doctor_id) ON DELETE RESTRICT,
+    created_by INT NOT NULL
+        REFERENCES user_account(user_id) ON DELETE RESTRICT,
+    slot_start TIMESTAMPTZ NOT NULL,
+    slot_end   TIMESTAMPTZ NOT NULL,
+    mode VARCHAR(20) NOT NULL
+        CHECK (mode IN ('in_person', 'online')),
+    meeting_link TEXT,
+    status VARCHAR(20) NOT NULL
+        CHECK (status IN (
+            'booked',
+            'confirmed',
+            'completed',
+            'cancelled',
+            'no_show'
+        )),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT appointment_slot_time_check
+        CHECK (slot_end > slot_start),
+    CONSTRAINT appointment_meeting_link_check
+        CHECK (
+            (mode = 'online' AND meeting_link IS NOT NULL)
+            OR
+            (mode = 'in_person' AND meeting_link IS NULL)
+        )
+);
