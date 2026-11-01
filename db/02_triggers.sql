@@ -96,3 +96,33 @@ AFTER UPDATE ON appointment
 FOR EACH ROW
 WHEN (OLD.status IS DISTINCT FROM NEW.status AND NEW.status = 'confirmed')
 EXECUTE FUNCTION queue_appointment_reminders();
+
+CREATE OR REPLACE FUNCTION audit_prescription_change()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO audit_log (
+        action,
+        entity_type,
+        entity_id,
+        details
+    ) VALUES (
+        TG_OP,
+        'prescription',
+        NEW.prescription_id,
+        jsonb_build_object(
+            'consultation_id', NEW.consultation_id,
+            'issued_at', NEW.issued_at,
+            'notes', NEW.notes
+        )
+    );
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_audit_prescription
+AFTER INSERT OR UPDATE ON prescription
+FOR EACH ROW
+EXECUTE FUNCTION audit_prescription_change();
