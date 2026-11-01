@@ -133,3 +133,72 @@ AS $$
     FROM exposure
     CROSS JOIN adverse_events;
 $$;
+
+CREATE OR REPLACE FUNCTION fn_severity_score(p_report_id INT)
+RETURNS NUMERIC(4, 2)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    report_narrative TEXT;
+    patient_birth_date DATE;
+    report_item_drug_id INT;
+    score NUMERIC(4, 2) := 0;
+    interaction_severity VARCHAR(20);
+BEGIN
+    SELECT r.narrative, p.date_of_birth, pi.drug_id
+    INTO report_narrative, patient_birth_date, report_item_drug_id
+    FROM ade_report r
+    JOIN patient p ON p.patient_id = r.patient_id
+    LEFT JOIN prescription_item pi ON pi.item_id = r.item_id
+    WHERE r.report_id = p_report_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'ADE report % does not exist', p_report_id;
+    END IF;
+
+    -- Longer narratives usually contain more clinical detail.
+    IF char_length(report_narrative) >= 100 THEN
+        score := score + 2;
+    END IF;
+
+    -- Flag terms indicate potentially serious symptoms.
+    IF report_narrative ~* '(bleed|haemorrhage|hemorrhage|anaphylaxis|faint|breathless|unconscious)' THEN
+        score := score + 3;
+    END IF;
+
+    -- Older patients receive one additional risk point.
+    IF date_part('year', age(CURRENT_DATE, patient_birth_date)) >= 65 THEN
+        score := score + 1;
+    END IF;
+
+    -- Use the most severe interaction involving the suspected drug.
+    SELECT CASE
+        WHEN bool_or(di.severity = 'major') THEN 'major'
+        WHEN bool_or(di.severity = 'moderate') THEN 'moderate'
+        ELSE NULL
+    END
+    INTO interaction_severity
+    FROM prescription_item pi
+    JOIN prescription pr ON pr.prescription_id = pi.prescription_id
+    JOIN consultation c ON c.consultation_id = pr.consultation_id
+    JOIN appointment a ON a.appointment_id = c.appointment_id
+    JOIN drug_interaction di
+      ON di.drug_a_id = LEAST(report_item_drug_id, pi.drug_id)
+     AND di.drug_b_id = GREATEST(report_item_drug_id, pi.drug_id)
+    WHERE a.patient_id = (
+        SELECT patient_id
+        FROM ade_report
+        WHERE report_id = p_report_id
+    )
+      AND report_item_drug_id IS NOT NULL
+      AND pi.drug_id <> report_item_drug_id;
+
+    IF interaction_severity = 'major' THEN
+        score := score + 3;
+    ELSIF interaction_severity = 'moderate' THEN
+        score := score + 1;
+    END IF;
+
+    RETURN LEAST(score, 10.00);
+END;
+$$;
