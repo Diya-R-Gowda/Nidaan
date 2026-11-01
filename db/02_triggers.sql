@@ -26,8 +26,8 @@ BEGIN
         SELECT di.severity, di.mechanism, di.clinical_effect
         INTO interaction
         FROM drug_interaction di
-        WHERE (di.drug_a_id = LEAST(NEW.drug_id, other_item.drug_id)
-           AND di.drug_b_id = GREATEST(NEW.drug_id, other_item.drug_id));
+        WHERE di.drug_a_id = LEAST(NEW.drug_id, other_item.drug_id)
+          AND di.drug_b_id = GREATEST(NEW.drug_id, other_item.drug_id);
 
         IF FOUND THEN
             INSERT INTO interaction_alert (
@@ -57,45 +57,54 @@ AFTER INSERT ON prescription_item
 FOR EACH ROW
 EXECUTE FUNCTION check_prescription_item_interactions();
 
-CREATE OR REPLACE FUNCTION queue_appointment_reminders()
+CREATE OR REPLACE FUNCTION trg_queue_reminders_fn()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 BEGIN
+    UPDATE reminder_queue
+    SET channel = 'in_app',
+        scheduled_for = NEW.slot_start - INTERVAL '24 hours',
+        sent_at = NULL,
+        status = 'pending',
+        attempts = 0
+    WHERE appointment_id = NEW.appointment_id
+      AND recipient_type IN ('patient', 'doctor');
+
     INSERT INTO reminder_queue (
         appointment_id,
         recipient_type,
         channel,
         scheduled_for,
+        sent_at,
         status,
         attempts
-    ) VALUES
-        (
-            NEW.appointment_id,
-            'patient',
-            'email',
-            NEW.slot_start - INTERVAL '24 hours',
-            'pending',
-            0
-        ),
-        (
-            NEW.appointment_id,
-            'doctor',
-            'email',
-            NEW.slot_start - INTERVAL '24 hours',
-            'pending',
-            0
-        );
+    )
+    SELECT NEW.appointment_id,
+           recipient.recipient_type,
+           'in_app',
+           NEW.slot_start - INTERVAL '24 hours',
+           NULL,
+           'pending',
+           0
+    FROM (VALUES ('patient'::VARCHAR(20)), ('doctor'::VARCHAR(20)))
+         AS recipient(recipient_type)
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM reminder_queue AS existing
+        WHERE existing.appointment_id = NEW.appointment_id
+          AND existing.recipient_type = recipient.recipient_type
+    );
 
     RETURN NEW;
 END;
 $$;
 
 CREATE TRIGGER trg_queue_reminders
-AFTER UPDATE ON appointment
+AFTER UPDATE OF status ON appointment
 FOR EACH ROW
 WHEN (OLD.status IS DISTINCT FROM NEW.status AND NEW.status = 'confirmed')
-EXECUTE FUNCTION queue_appointment_reminders();
+EXECUTE FUNCTION trg_queue_reminders_fn();
 
 CREATE OR REPLACE FUNCTION audit_prescription_change()
 RETURNS TRIGGER

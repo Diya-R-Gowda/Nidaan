@@ -40,7 +40,7 @@ LEFT JOIN consultation c ON c.appointment_id = a.appointment_id
 WHERE a.slot_start >= now()
   AND a.status IN ('booked', 'confirmed');
 
-CREATE VIEW vw_pending_reminders AS
+CREATE OR REPLACE VIEW vw_pending_reminders AS
 SELECT
     rq.reminder_id,
     rq.appointment_id,
@@ -48,7 +48,8 @@ SELECT
     rq.channel,
     rq.scheduled_for,
     rq.status,
-    rq.attempts
+    rq.attempts,
+    rq.sent_at
 FROM reminder_queue rq
 WHERE rq.status = 'pending'
   AND rq.sent_at IS NULL
