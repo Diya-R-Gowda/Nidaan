@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { readSession } from "@/lib/auth";
 import ReminderPanel from "./ReminderPanel";
 
+export const dynamic = "force-dynamic";
+
 export default async function ReceptionPage() {
   const session = await readSession();
 
