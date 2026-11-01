@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "seed:users": "node --experimental-strip-types scripts/seed-users.ts"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
