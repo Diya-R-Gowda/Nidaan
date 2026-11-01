@@ -219,6 +219,21 @@ export default async function DoctorPage() {
           <h1 style={{ margin: "8px 0 0", fontSize: 32, letterSpacing: "-0.03em" }}>
             Today&apos;s appointments
           </h1>
+          <a
+            href="/doctor/prescriptions"
+            style={{
+              display: "inline-block",
+              marginTop: 16,
+              borderRadius: 10,
+              background: "#3157a4",
+              color: "#fff",
+              padding: "11px 16px",
+              fontWeight: 700,
+              textDecoration: "none",
+            }}
+          >
+            Open prescription builder
+          </a>
         </header>
         <Suspense fallback={<LoadingSchedule />}>
           <TodaySchedule userId={session.userId} />
