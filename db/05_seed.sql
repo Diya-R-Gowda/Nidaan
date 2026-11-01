@@ -62,3 +62,49 @@ INSERT INTO drug_interaction (
      'Increased risk of hypoglycaemia', 'Drug interaction reference'),
     (18, 19, 'major', 'Serotonergic activity from both medicines',
      'Potentially life-threatening serotonin syndrome', 'Drug interaction reference');
+
+INSERT INTO patient (
+    patient_id,
+    full_name,
+    date_of_birth,
+    sex,
+    phone,
+    email,
+    blood_group,
+    registered_at
+) VALUES
+    (1, 'Aarav Sharma', '1998-04-12', 'male', '+91-9000000001', 'aarav.sharma@example.com', 'O+', '2026-01-08 09:15:00+05:30'),
+    (2, 'Ananya Rao', '2002-11-03', 'female', '+91-9000000002', 'ananya.rao@example.com', 'A+', '2026-01-09 10:30:00+05:30'),
+    (3, 'Vikram Iyer', '1975-07-19', 'male', '+91-9000000003', 'vikram.iyer@example.com', 'B+', '2026-01-10 11:00:00+05:30'),
+    (4, 'Meera Nair', '1988-02-25', 'female', '+91-9000000004', 'meera.nair@example.com', 'AB+', '2026-01-12 14:20:00+05:30'),
+    (5, 'Rohan Desai', '2010-09-14', 'male', '+91-9000000005', 'rohan.desai@example.com', 'O-', '2026-01-13 15:10:00+05:30'),
+    (6, 'Kavya Menon', '1995-06-08', 'female', '+91-9000000006', 'kavya.menon@example.com', 'A-', '2026-01-15 09:45:00+05:30'),
+    (7, 'Suresh Kulkarni', '1952-12-01', 'male', '+91-9000000007', 'suresh.kulkarni@example.com', 'B+', '2026-01-16 10:15:00+05:30'),
+    (8, 'Fatima Sheikh', '1960-03-22', 'female', '+91-9000000008', 'fatima.sheikh@example.com', 'O+', '2026-01-18 12:00:00+05:30'),
+    (9, 'Nikhil Bhat', '1982-10-30', 'male', '+91-9000000009', 'nikhil.bhat@example.com', 'AB-', '2026-01-20 16:30:00+05:30'),
+    (10, 'Priya Krishnan', '1970-01-17', 'female', '+91-9000000010', 'priya.krishnan@example.com', 'A+', '2026-01-21 09:00:00+05:30'),
+    (11, 'Aditya Joshi', '1991-05-05', 'male', '+91-9000000011', 'aditya.joshi@example.com', 'B-', '2026-01-23 11:45:00+05:30'),
+    (12, 'Lakshmi Hegde', '1948-08-11', 'female', '+91-9000000012', 'lakshmi.hegde@example.com', 'O+', '2026-01-24 13:15:00+05:30'),
+    (13, 'Arjun Pillai', '2005-12-27', 'male', '+91-9000000013', 'arjun.pillai@example.com', 'A+', '2026-01-26 15:45:00+05:30'),
+    (14, 'Sneha Kapoor', '1985-09-09', 'female', '+91-9000000014', 'sneha.kapoor@example.com', 'AB+', '2026-01-27 10:00:00+05:30'),
+    (15, 'Mohan Reddy', '1939-06-16', 'male', '+91-9000000015', 'mohan.reddy@example.com', 'B+', '2026-01-29 09:30:00+05:30'),
+    (16, 'Ishita Sen', '1999-03-03', 'female', '+91-9000000016', 'ishita.sen@example.com', 'O-', '2026-02-01 14:00:00+05:30'),
+    (17, 'Rahul Verma', '1965-11-21', 'male', '+91-9000000017', 'rahul.verma@example.com', 'A-', '2026-02-03 16:15:00+05:30'),
+    (18, 'Divya Thomas', '1978-04-28', 'female', '+91-9000000018', 'divya.thomas@example.com', 'B+', '2026-02-05 11:30:00+05:30'),
+    (19, 'Kabir Malhotra', '2015-07-07', 'male', '+91-9000000019', 'kabir.malhotra@example.com', 'O+', '2026-02-07 10:45:00+05:30'),
+    (20, 'Geeta Prasad', '1957-02-13', 'female', '+91-9000000020', 'geeta.prasad@example.com', 'AB+', '2026-02-09 13:00:00+05:30'),
+    (21, 'Manish Choudhary', '1989-12-18', 'male', '+91-9000000021', 'manish.choudhary@example.com', 'A+', '2026-02-11 15:30:00+05:30'),
+    (22, 'Pooja Banerjee', '1993-08-26', 'female', '+91-9000000022', 'pooja.banerjee@example.com', 'B+', '2026-02-13 09:15:00+05:30'),
+    (23, 'Harish Gowda', '1945-05-31', 'male', '+91-9000000023', 'harish.gowda@example.com', 'O+', '2026-02-15 10:30:00+05:30'),
+    (24, 'Neha Agarwal', '2000-01-06', 'female', '+91-9000000024', 'neha.agarwal@example.com', 'A+', '2026-02-17 12:45:00+05:30'),
+    (25, 'Joseph Mathew', '1968-10-12', 'male', '+91-9000000025', 'joseph.mathew@example.com', 'AB-', '2026-02-19 14:15:00+05:30'),
+    (26, 'Shreya Murthy', '1980-06-24', 'female', '+91-9000000026', 'shreya.murthy@example.com', 'O-', '2026-02-21 16:00:00+05:30'),
+    (27, 'Yash Patil', '2008-02-09', 'male', '+91-9000000027', 'yash.patil@example.com', 'B+', '2026-02-23 11:00:00+05:30'),
+    (28, 'Nandini Das', '1959-09-02', 'female', '+91-9000000028', 'nandini.das@example.com', 'A-', '2026-02-25 09:45:00+05:30'),
+    (29, 'Sameer Khan', '1972-11-15', 'male', '+91-9000000029', 'sameer.khan@example.com', 'O+', '2026-02-27 13:30:00+05:30'),
+    (30, 'Asha Fernandes', '1942-12-29', 'female', '+91-9000000030', 'asha.fernandes@example.com', 'B-', '2026-03-01 15:00:00+05:30');
+
+SELECT setval(
+    pg_get_serial_sequence('patient', 'patient_id'),
+    (SELECT MAX(patient_id) FROM patient)
+);
