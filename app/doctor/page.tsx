@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { readSession } from "@/lib/auth";
 import { pool } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 type ScheduleAppointment = {
   appointment_id: number;
   patient_id: number;

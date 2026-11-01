@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { readSession } from "@/lib/auth";
 import { pool } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 type SignalRow = {
   drug_id: number;
   drug_name: string;

@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { readSession } from "@/lib/auth";
 import AuditLogViewer from "./AuditLogViewer";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminAuditLogsPage() {
   const session = await readSession();
 
