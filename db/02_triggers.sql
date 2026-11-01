@@ -56,3 +56,43 @@ CREATE TRIGGER trg_check_interaction
 AFTER INSERT ON prescription_item
 FOR EACH ROW
 EXECUTE FUNCTION check_prescription_item_interactions();
+
+CREATE OR REPLACE FUNCTION queue_appointment_reminders()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO reminder_queue (
+        appointment_id,
+        recipient_type,
+        channel,
+        scheduled_for,
+        status,
+        attempts
+    ) VALUES
+        (
+            NEW.appointment_id,
+            'patient',
+            'email',
+            NEW.slot_start - INTERVAL '24 hours',
+            'pending',
+            0
+        ),
+        (
+            NEW.appointment_id,
+            'doctor',
+            'email',
+            NEW.slot_start - INTERVAL '24 hours',
+            'pending',
+            0
+        );
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_queue_reminders
+AFTER UPDATE ON appointment
+FOR EACH ROW
+WHEN (OLD.status IS DISTINCT FROM NEW.status AND NEW.status = 'confirmed')
+EXECUTE FUNCTION queue_appointment_reminders();
