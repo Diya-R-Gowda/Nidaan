@@ -91,3 +91,45 @@ BEGIN
     RETURN invoice_id_result;
 END;
 $$;
+
+CREATE OR REPLACE FUNCTION fn_signal_rate(
+    p_drug_id INT,
+    p_from_date DATE,
+    p_to_date DATE
+)
+RETURNS TABLE (
+    reports BIGINT,
+    exposed_patients BIGINT,
+    rate_per_100 NUMERIC
+)
+LANGUAGE SQL
+AS $$
+    WITH exposure AS (
+        SELECT COUNT(DISTINCT a.patient_id) AS exposed_patients
+        FROM prescription_item pi
+        JOIN prescription p ON p.prescription_id = pi.prescription_id
+        JOIN consultation c ON c.consultation_id = p.consultation_id
+        JOIN appointment a ON a.appointment_id = c.appointment_id
+        WHERE pi.drug_id = p_drug_id
+          AND p.issued_at >= p_from_date
+          AND p.issued_at < p_to_date + INTERVAL '1 day'
+    ),
+    adverse_events AS (
+        SELECT COUNT(DISTINCT r.report_id) AS reports
+        FROM ade_report r
+        JOIN prescription_item pi ON pi.item_id = r.item_id
+        WHERE pi.drug_id = p_drug_id
+          AND r.reported_at >= p_from_date
+          AND r.reported_at < p_to_date + INTERVAL '1 day'
+    )
+    SELECT
+        adverse_events.reports,
+        exposure.exposed_patients,
+        ROUND(
+            adverse_events.reports * 100.0
+            / NULLIF(exposure.exposed_patients, 0),
+            2
+        ) AS rate_per_100
+    FROM exposure
+    CROSS JOIN adverse_events;
+$$;
