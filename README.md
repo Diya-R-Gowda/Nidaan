@@ -980,10 +980,13 @@ Open http://localhost:3000.
 
 | Role | Email | Password |
 |---|---|---|
-| Receptionist | reception@nidaan.local | *see `db/05_seed.sql`* |
-| Doctor | doctor@nidaan.local | *see `db/05_seed.sql`* |
-| Pharmacovigilance | pv@nidaan.local | *see `db/05_seed.sql`* |
-| Admin | admin@nidaan.local | *see `db/05_seed.sql`* |
+| Receptionist | receptionist@nidaan.local | Set with `DEMO_RECEPTIONIST_PASSWORD` |
+| Prescriber | prescriber@nidaan.local | Set with `DEMO_PRESCRIBER_PASSWORD` |
+| Pharmacovigilance | pharmacovigilance@nidaan.local | Set with `DEMO_PHARMACOVIGILANCE_PASSWORD` |
+| Admin | admin@nidaan.local | Set with `DEMO_ADMIN_PASSWORD` |
+
+Demo passwords are supplied through these environment variables when running
+`scripts/seed-users.ts`. They are not stored in `db/05_seed.sql`.
 
 ---
 

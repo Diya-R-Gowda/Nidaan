@@ -2,6 +2,7 @@ import bcrypt from "bcrypt";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { pool } from "@/lib/db";
 
 export const SESSION_COOKIE = "nidaan_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
@@ -118,7 +119,20 @@ export async function readSession(): Promise<Session | null> {
     return null;
   }
 
-  return decodeSession(value);
+  const session = decodeSession(value);
+  if (!session) return null;
+
+  const accountResult = await pool.query<{ role: UserRole; is_active: boolean }>(
+    `SELECT role, is_active
+     FROM user_account
+     WHERE user_id = $1`,
+    [session.userId],
+  );
+  const account = accountResult.rows[0];
+  if (!account || !account.is_active || account.role !== session.role) {
+    return null;
+  }
+  return session;
 }
 
 export async function requireRole(

@@ -1,0 +1,249 @@
+// Relational model translated from db/01_schema.sql.
+// PostgreSQL-specific types and generated-column expressions are retained as
+// custom DBML types/notes where DBML has no native equivalent.
+
+Table user_account {
+  user_id serial [pk]
+  email varchar(255) [not null, unique]
+  password_hash varchar(255) [not null]
+  full_name varchar(120) [not null]
+  role varchar(30) [not null]
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+
+  checks {
+    `role IN ('receptionist', 'prescriber', 'pharmacovigilance', 'admin')`
+  }
+}
+
+Table doctor {
+  doctor_id serial [pk]
+  user_id int [not null, unique]
+  registration_no varchar(60) [not null, unique]
+  specialisation varchar(120) [not null]
+  consultation_fee numeric(10, 2) [not null]
+
+  checks {
+    `consultation_fee >= 0`
+  }
+}
+
+Table patient {
+  patient_id serial [pk]
+  full_name varchar(120) [not null]
+  date_of_birth date [not null]
+  sex varchar(20) [not null]
+  phone varchar(30) [not null]
+  email varchar(255)
+  blood_group varchar(10)
+  registered_at timestamptz [not null, default: `now()`]
+}
+
+Table patient_allergy {
+  allergy_id serial [pk]
+  patient_id int [not null]
+  substance varchar(120) [not null]
+  severity varchar(20) [not null]
+  noted_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (patient_id, substance) [unique]
+  }
+}
+
+Table appointment {
+  appointment_id serial [pk]
+  patient_id int [not null]
+  doctor_id int [not null]
+  created_by int [not null]
+  slot_start timestamptz [not null]
+  slot_end timestamptz [not null]
+  mode varchar(20) [not null]
+  meeting_link text
+  status varchar(20) [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  checks {
+    `mode IN ('in_person', 'online')`
+    `status IN ('booked', 'confirmed', 'completed', 'cancelled', 'no_show')`
+    `slot_end > slot_start` [name: 'appointment_slot_time_check']
+    `((mode = 'online' AND meeting_link IS NOT NULL) OR (mode = 'in_person' AND meeting_link IS NULL))` [name: 'appointment_meeting_link_check']
+  }
+
+  indexes {
+    (doctor_id, slot_start) [name: 'idx_appt_doctor_slot']
+    (status) [name: 'idx_appt_status', note: 'Partial predicate: status IN (booked, confirmed)']
+  }
+}
+
+Table consultation {
+  consultation_id serial [pk]
+  appointment_id int [not null, unique]
+  chief_complaint text [not null]
+  notes text
+  diagnosis text
+  started_at timestamptz
+  ended_at timestamptz
+}
+
+Table drug {
+  drug_id serial [pk]
+  drug_name varchar(160) [not null]
+  generic_name varchar(160) [not null]
+  drug_class varchar(120) [not null]
+  form varchar(60) [not null]
+  strength varchar(60) [not null]
+  unit_price numeric(10, 2) [not null]
+  is_active boolean [not null, default: true]
+
+  checks {
+    `unit_price >= 0`
+  }
+}
+
+Table prescription {
+  prescription_id serial [pk]
+  consultation_id int [not null]
+  issued_at timestamptz [not null, default: `now()`]
+  notes text
+}
+
+Table prescription_item {
+  item_id serial [pk]
+  prescription_id int [not null]
+  drug_id int [not null]
+  dose varchar(120) [not null]
+  frequency varchar(120) [not null]
+  duration_days int [not null]
+  quantity int [not null]
+
+  checks {
+    `quantity > 0`
+  }
+
+  indexes {
+    (drug_id) [name: 'idx_item_drug']
+  }
+}
+
+Table drug_interaction {
+  drug_a_id int [not null]
+  drug_b_id int [not null]
+  severity varchar(20) [not null]
+  mechanism text [not null]
+  clinical_effect text [not null]
+  reference_source text
+
+  indexes {
+    (drug_a_id, drug_b_id) [pk]
+  }
+
+  checks {
+    `drug_a_id < drug_b_id` [name: 'drug_interaction_order_check']
+  }
+}
+
+Table interaction_alert {
+  alert_id serial [pk]
+  item_id int [not null]
+  conflicting_item_id int [not null]
+  severity varchar(20) [not null]
+  message text [not null]
+  raised_at timestamptz [not null, default: `now()`]
+  acknowledged_by int
+  acknowledged_at timestamptz
+}
+
+Table ade_report {
+  report_id serial [pk]
+  patient_id int [not null]
+  item_id int
+  narrative text [not null]
+  narrative_tsv tsvector [note: "GENERATED ALWAYS AS (to_tsvector('english', narrative)) STORED"]
+  narrative_vec vector(384)
+  onset_date date [not null]
+  reported_at timestamptz [not null, default: `now()`]
+  reported_by int [not null]
+  severity_score numeric(4, 2)
+  status varchar(20)
+
+  checks {
+    `char_length(narrative) >= 20`
+    `status IN ('new', 'under_review', 'confirmed', 'dismissed')`
+  }
+
+  indexes {
+    (narrative_tsv) [name: 'idx_ade_narrative_tsv', type: gin]
+    (narrative_vec) [name: 'idx_ade_narrative_vec', note: 'HNSW index using vector_cosine_ops']
+  }
+}
+
+Table invoice {
+  invoice_id serial [pk]
+  consultation_id int [not null, unique]
+  issued_by int [not null]
+  subtotal numeric(10, 2)
+  tax_amount numeric(10, 2)
+  total numeric(10, 2)
+  status varchar(20)
+  issued_at timestamptz [default: `now()`]
+}
+
+Table invoice_line {
+  line_id serial [pk]
+  invoice_id int [not null]
+  line_type varchar(30)
+  description text
+  quantity int
+  unit_price numeric(10, 2)
+  line_total numeric(10, 2)
+
+  checks {
+    `quantity > 0`
+    `unit_price >= 0`
+  }
+}
+
+Table reminder_queue {
+  reminder_id serial [pk]
+  appointment_id int [not null]
+  recipient_type varchar(20)
+  channel varchar(20)
+  scheduled_for timestamptz
+  sent_at timestamptz
+  status varchar(20)
+  attempts int
+}
+
+Table audit_log {
+  log_id serial [pk]
+  actor_user_id int
+  action varchar(100)
+  entity_type varchar(100)
+  entity_id int
+  details jsonb
+  occurred_at timestamptz [default: `now()`]
+}
+
+Ref: doctor.user_id - user_account.user_id [delete: restrict]
+Ref: patient_allergy.patient_id > patient.patient_id [delete: restrict]
+Ref: appointment.patient_id > patient.patient_id [delete: restrict]
+Ref: appointment.doctor_id > doctor.doctor_id [delete: restrict]
+Ref: appointment.created_by > user_account.user_id [delete: restrict]
+Ref: consultation.appointment_id - appointment.appointment_id [delete: restrict]
+Ref: prescription.consultation_id > consultation.consultation_id [delete: restrict]
+Ref: prescription_item.prescription_id > prescription.prescription_id [delete: restrict]
+Ref: prescription_item.drug_id > drug.drug_id [delete: restrict]
+Ref: drug_interaction.drug_a_id > drug.drug_id [delete: restrict]
+Ref: drug_interaction.drug_b_id > drug.drug_id [delete: restrict]
+Ref: interaction_alert.item_id > prescription_item.item_id [delete: restrict]
+Ref: interaction_alert.conflicting_item_id > prescription_item.item_id [delete: restrict]
+Ref: interaction_alert.acknowledged_by > user_account.user_id [delete: restrict]
+Ref: ade_report.patient_id > patient.patient_id [delete: restrict]
+Ref: ade_report.item_id > prescription_item.item_id [delete: restrict]
+Ref: ade_report.reported_by > user_account.user_id [delete: restrict]
+Ref: invoice.consultation_id - consultation.consultation_id [delete: restrict]
+Ref: invoice.issued_by > user_account.user_id [delete: restrict]
+Ref: invoice_line.invoice_id > invoice.invoice_id [delete: restrict]
+Ref: reminder_queue.appointment_id > appointment.appointment_id [delete: restrict]
+Ref: audit_log.actor_user_id > user_account.user_id [delete: restrict]
