@@ -185,6 +185,13 @@ export async function POST(request: Request) {
       ],
     );
 
+    await client.query(
+      `UPDATE appointment
+       SET status = 'completed'
+       WHERE appointment_id = $1`,
+      [appointmentId],
+    );
+
     await client.query("COMMIT");
     transactionStarted = false;
     return NextResponse.json({ consultation: result.rows[0] }, { status: 201 });
