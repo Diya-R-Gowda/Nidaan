@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { PoolClient } from "pg";
 import { requireRole } from "@/lib/auth";
 import { pool } from "@/lib/db";
 
@@ -60,8 +61,7 @@ function validateDrugInput(value: unknown): DrugInput | null {
 async function authorizeAdmin() {
   try {
     const authorization = await requireRole(["admin"]);
-    if (authorization instanceof NextResponse) return authorization;
-    return null;
+    return authorization;
   } catch {
     return NextResponse.json(
       { error: "Unable to verify authorization" },
@@ -71,8 +71,8 @@ async function authorizeAdmin() {
 }
 
 export async function GET() {
-  const authorizationError = await authorizeAdmin();
-  if (authorizationError) return authorizationError;
+  const authorization = await authorizeAdmin();
+  if (authorization instanceof NextResponse) return authorization;
 
   try {
     const result = await pool.query<Drug>(
@@ -92,8 +92,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const authorizationError = await authorizeAdmin();
-  if (authorizationError) return authorizationError;
+  const authorization = await authorizeAdmin();
+  if (authorization instanceof NextResponse) return authorization;
 
   let body: unknown;
   try {
@@ -113,8 +113,14 @@ export async function POST(request: Request) {
     );
   }
 
+  let client: PoolClient | undefined;
+  let transactionStarted = false;
   try {
-    const result = await pool.query<Drug>(
+    client = await pool.connect();
+    await client.query("BEGIN");
+    transactionStarted = true;
+    await setAuditActor(client, authorization.userId);
+    const result = await client.query<Drug>(
       `INSERT INTO drug (
          drug_name, generic_name, drug_class, form, strength, unit_price
        )
@@ -130,19 +136,23 @@ export async function POST(request: Request) {
         drug.unit_price,
       ],
     );
+    await client.query("COMMIT");
+    transactionStarted = false;
     return NextResponse.json({ drug: result.rows[0] }, { status: 201 });
-  } catch (error) {
-    console.error("Admin drug creation failed:", error);
+  } catch {
+    await rollbackSafely(client, transactionStarted);
     return NextResponse.json(
       { error: "Unable to add the drug" },
       { status: 500 },
     );
+  } finally {
+    client?.release();
   }
 }
 
 export async function PATCH(request: Request) {
-  const authorizationError = await authorizeAdmin();
-  if (authorizationError) return authorizationError;
+  const authorization = await authorizeAdmin();
+  if (authorization instanceof NextResponse) return authorization;
 
   let body: unknown;
   try {
@@ -164,8 +174,14 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "A valid drug_id is required" }, { status: 400 });
   }
 
+  let client: PoolClient | undefined;
+  let transactionStarted = false;
   try {
-    const result = await pool.query<Drug>(
+    client = await pool.connect();
+    await client.query("BEGIN");
+    transactionStarted = true;
+    await setAuditActor(client, authorization.userId);
+    const result = await client.query<Drug>(
       `UPDATE drug
        SET is_active = FALSE
        WHERE drug_id = $1
@@ -176,22 +192,47 @@ export async function PATCH(request: Request) {
     );
 
     if (result.rows[0]) {
+      await client.query("COMMIT");
+      transactionStarted = false;
       return NextResponse.json({ drug: result.rows[0] });
     }
 
-    const existing = await pool.query<{ is_active: boolean }>(
+    const existing = await client.query<{ is_active: boolean }>(
       "SELECT is_active FROM drug WHERE drug_id = $1",
       [drugId],
     );
+    await client.query("COMMIT");
+    transactionStarted = false;
     if (!existing.rows[0]) {
       return NextResponse.json({ error: "Drug not found" }, { status: 404 });
     }
     return NextResponse.json({ error: "Drug is already inactive" }, { status: 409 });
-  } catch (error) {
-    console.error("Admin drug deactivation failed:", error);
+  } catch {
+    await rollbackSafely(client, transactionStarted);
     return NextResponse.json(
       { error: "Unable to deactivate the drug" },
       { status: 500 },
     );
+  } finally {
+    client?.release();
+  }
+}
+
+async function setAuditActor(client: PoolClient, userId: number): Promise<void> {
+  await client.query(
+    "SELECT set_config('nidaan.actor_user_id', $1, TRUE)",
+    [String(userId)],
+  );
+}
+
+async function rollbackSafely(
+  client: PoolClient | undefined,
+  transactionStarted: boolean,
+): Promise<void> {
+  if (!client || !transactionStarted) return;
+  try {
+    await client.query("ROLLBACK");
+  } catch {
+    // Keep database errors out of the response.
   }
 }

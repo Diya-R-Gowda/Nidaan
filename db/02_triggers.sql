@@ -22,6 +22,8 @@ BEGIN
         JOIN appointment a ON a.appointment_id = c.appointment_id
         WHERE a.patient_id = patient_id_for_item
           AND pi.item_id <> NEW.item_id
+          AND p.issued_at <= CURRENT_TIMESTAMP
+          AND p.issued_at + (pi.duration_days * INTERVAL '1 day') > CURRENT_TIMESTAMP
     LOOP
         SELECT di.severity, di.mechanism, di.clinical_effect
         INTO interaction
@@ -106,25 +108,32 @@ FOR EACH ROW
 WHEN (OLD.status IS DISTINCT FROM NEW.status AND NEW.status = 'confirmed')
 EXECUTE FUNCTION trg_queue_reminders_fn();
 
-CREATE OR REPLACE FUNCTION audit_prescription_change()
+CREATE OR REPLACE FUNCTION audit_clinical_record_change()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
+DECLARE
+    changed_entity_id INT;
 BEGIN
+    changed_entity_id := CASE TG_TABLE_NAME
+        WHEN 'appointment' THEN (to_jsonb(NEW) ->> 'appointment_id')::INT
+        WHEN 'consultation' THEN (to_jsonb(NEW) ->> 'consultation_id')::INT
+        WHEN 'prescription' THEN (to_jsonb(NEW) ->> 'prescription_id')::INT
+        WHEN 'ade_report' THEN (to_jsonb(NEW) ->> 'report_id')::INT
+        WHEN 'drug' THEN (to_jsonb(NEW) ->> 'drug_id')::INT
+        ELSE NULL
+    END;
+
     INSERT INTO audit_log (
+        actor_user_id,
         action,
         entity_type,
-        entity_id,
-        details
+        entity_id
     ) VALUES (
+        NULLIF(current_setting('nidaan.actor_user_id', TRUE), '')::INT,
         TG_OP,
-        'prescription',
-        NEW.prescription_id,
-        jsonb_build_object(
-            'consultation_id', NEW.consultation_id,
-            'issued_at', NEW.issued_at,
-            'notes', NEW.notes
-        )
+        TG_TABLE_NAME,
+        changed_entity_id
     );
 
     RETURN NEW;
@@ -134,4 +143,24 @@ $$;
 CREATE TRIGGER trg_audit_prescription
 AFTER INSERT OR UPDATE ON prescription
 FOR EACH ROW
-EXECUTE FUNCTION audit_prescription_change();
+EXECUTE FUNCTION audit_clinical_record_change();
+
+CREATE TRIGGER trg_audit_appointment
+AFTER INSERT OR UPDATE ON appointment
+FOR EACH ROW
+EXECUTE FUNCTION audit_clinical_record_change();
+
+CREATE TRIGGER trg_audit_consultation
+AFTER INSERT OR UPDATE ON consultation
+FOR EACH ROW
+EXECUTE FUNCTION audit_clinical_record_change();
+
+CREATE TRIGGER trg_audit_ade_report
+AFTER INSERT OR UPDATE ON ade_report
+FOR EACH ROW
+EXECUTE FUNCTION audit_clinical_record_change();
+
+CREATE TRIGGER trg_audit_drug
+AFTER INSERT OR UPDATE ON drug
+FOR EACH ROW
+EXECUTE FUNCTION audit_clinical_record_change();

@@ -16,8 +16,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isPositiveInt32(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value > 0 &&
+    value <= 2_147_483_647
+  );
+}
+
 export function GET() {
-  return NextResponse.json({ resource: "appointments" });
+  return requireAppointmentsReadRole();
+}
+
+async function requireAppointmentsReadRole() {
+  try {
+    const authorization = await requireRole(["receptionist", "prescriber"]);
+    if (authorization instanceof NextResponse) return authorization;
+    return NextResponse.json({ resource: "appointments" });
+  } catch {
+    return NextResponse.json(
+      { error: "Unable to verify authorization" },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(request: Request) {
@@ -46,12 +68,7 @@ export async function POST(request: Request) {
   }
 
   const { patient_id, doctor_id, slot_start, slot_end, mode, meeting_link } = body;
-  if (
-    !Number.isInteger(patient_id) ||
-    (patient_id as number) <= 0 ||
-    !Number.isInteger(doctor_id) ||
-    (doctor_id as number) <= 0
-  ) {
+  if (!isPositiveInt32(patient_id) || !isPositiveInt32(doctor_id)) {
     return NextResponse.json(
       { error: "patient_id and doctor_id must be positive integers" },
       { status: 400 },
@@ -104,6 +121,11 @@ export async function POST(request: Request) {
     client = await pool.connect();
     await client.query("BEGIN");
     transactionStarted = true;
+    await client.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
+    await client.query(
+      "SELECT set_config('nidaan.actor_user_id', $1, TRUE)",
+      [String(session.userId)],
+    );
 
     // Lock this stable parent row first: locking matching appointments alone
     // cannot serialize the first booking when no overlapping row exists yet.
@@ -114,7 +136,7 @@ export async function POST(request: Request) {
        WHERE d.doctor_id = $1
          AND account.role = 'prescriber'
          AND account.is_active = TRUE
-       FOR UPDATE OF d`,
+       FOR UPDATE OF d, account`,
       [doctor_id],
     );
     if (doctorResult.rowCount === 0) {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { PoolClient } from "pg";
 import { requireRole } from "@/lib/auth";
+import { parseOptionalTimestamp } from "@/lib/consultation-timestamps";
 import { pool } from "@/lib/db";
 
 type ConsultationRequest = {
@@ -16,16 +17,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function GET() {
-  return NextResponse.json({ resource: "consultations" });
-}
-
-function parseOptionalTimestamp(value: unknown): string | null | undefined {
-  if (value === undefined || value === null) return value;
-  if (typeof value !== "string" || value.trim() === "") return undefined;
-
-  const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : undefined;
+export async function GET() {
+  try {
+    const authorization = await requireRole(["prescriber"]);
+    if (authorization instanceof NextResponse) return authorization;
+    return NextResponse.json({ resource: "consultations" });
+  } catch {
+    return NextResponse.json(
+      { error: "Unable to verify authorization" },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(request: Request) {
@@ -96,6 +98,10 @@ export async function POST(request: Request) {
     client = await pool.connect();
     await client.query("BEGIN");
     transactionStarted = true;
+    await client.query(
+      "SELECT set_config('nidaan.actor_user_id', $1, TRUE)",
+      [String(userId)],
+    );
 
     const doctorResult = await client.query<{ doctor_id: number }>(
       `SELECT doctor.doctor_id

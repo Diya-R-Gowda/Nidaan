@@ -27,11 +27,15 @@ type PrescriptionItemForm = {
 };
 
 type InteractionAlert = {
-  alert_id: number;
-  item_id: number;
-  conflicting_item_id: number;
+  key: string;
   severity: string;
   message: string;
+  item_drug_name?: string;
+  conflicting_drug_name?: string;
+  item_ordinal?: number;
+  conflicting_item_ordinal?: number | null;
+  item_id?: number;
+  conflicting_item_id?: number;
 };
 
 type PrescriptionBuilderProps = {
@@ -104,15 +108,32 @@ function positiveInteger(value: string): number | null {
 function readAlerts(value: unknown): InteractionAlert[] {
   if (!isRecord(value) || !Array.isArray(value.interaction_alerts)) return [];
 
-  return value.interaction_alerts.filter(
-    (alert): alert is InteractionAlert =>
-      isRecord(alert) &&
-      typeof alert.alert_id === "number" &&
-      typeof alert.item_id === "number" &&
-      typeof alert.conflicting_item_id === "number" &&
-      typeof alert.severity === "string" &&
-      typeof alert.message === "string",
-  );
+  return value.interaction_alerts.flatMap((alert, index) => {
+    if (
+      !isRecord(alert) ||
+      typeof alert.severity !== "string" ||
+      typeof alert.message !== "string"
+    ) {
+      return [];
+    }
+    return [{
+      key: typeof alert.alert_id === "number"
+        ? `alert-${alert.alert_id}`
+        : `preview-${alert.item_ordinal ?? index}-${alert.conflicting_item_id ?? alert.conflicting_item_ordinal ?? index}`,
+      severity: alert.severity,
+      message: alert.message,
+      item_drug_name: typeof alert.item_drug_name === "string" ? alert.item_drug_name : undefined,
+      conflicting_drug_name: typeof alert.conflicting_drug_name === "string" ? alert.conflicting_drug_name : undefined,
+      item_ordinal: typeof alert.item_ordinal === "number" ? alert.item_ordinal : undefined,
+      conflicting_item_ordinal: typeof alert.conflicting_item_ordinal === "number"
+        ? alert.conflicting_item_ordinal
+        : alert.conflicting_item_ordinal === null ? null : undefined,
+      item_id: typeof alert.item_id === "number" ? alert.item_id : undefined,
+      conflicting_item_id: typeof alert.conflicting_item_id === "number"
+        ? alert.conflicting_item_id
+        : undefined,
+    }];
+  });
 }
 
 function prescriptionId(value: unknown): number | null {
@@ -137,12 +158,21 @@ export default function PrescriptionBuilder({
   const [submissionError, setSubmissionError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [alerts, setAlerts] = useState<InteractionAlert[]>([]);
+  const [reviewToken, setReviewToken] = useState("");
+  const [submissionAction, setSubmissionAction] = useState<"review" | "save" | null>(null);
+
+  function invalidateInteractionReview() {
+    setReviewToken("");
+    setAlerts([]);
+    setSuccessMessage("");
+  }
 
   function updateItem(
     key: number,
     field: Exclude<keyof PrescriptionItemForm, "key">,
     value: string,
   ) {
+    invalidateInteractionReview();
     setItems((current) =>
       current.map((item) => {
         if (item.key !== key) return item;
@@ -162,12 +192,18 @@ export default function PrescriptionBuilder({
   }
 
   function addItem() {
+    if (items.length >= 100) return;
+
+    invalidateInteractionReview();
     const key = nextItemKey.current;
     nextItemKey.current += 1;
-    setItems((current) => [...current, emptyItem(key)]);
+    setItems((current) =>
+      current.length >= 100 ? current : [...current, emptyItem(key)],
+    );
   }
 
   function removeItem(key: number) {
+    invalidateInteractionReview();
     setItems((current) => current.filter((item) => item.key !== key));
   }
 
@@ -177,8 +213,10 @@ export default function PrescriptionBuilder({
 
     setValidationError("");
     setSubmissionError("");
-    setSuccessMessage("");
-    setAlerts([]);
+    if (!reviewToken) {
+      setSuccessMessage("");
+      setAlerts([]);
+    }
 
     const selectedConsultationId = positiveInteger(consultationId);
     if (!selectedConsultationId) {
@@ -242,20 +280,50 @@ export default function PrescriptionBuilder({
 
     submissionInProgress.current = true;
     setSubmitting(true);
+    const action = reviewToken ? "save" : "review";
+    setSubmissionAction(action);
     try {
       const response = await fetch("/api/prescriptions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          action,
           consultation_id: selectedConsultationId,
           notes: notes.trim() || null,
           items: requestItems,
+          ...(action === "save" ? { interaction_review_token: reviewToken } : {}),
         }),
       });
       const data: unknown = await response.json().catch(() => null);
 
       if (!response.ok) {
+        const updatedReviewToken = isRecord(data) && typeof data.interaction_review_token === "string"
+          ? data.interaction_review_token
+          : "";
+        if (response.status === 409 && updatedReviewToken) {
+          setReviewToken(updatedReviewToken);
+          setAlerts(readAlerts(data));
+          setSubmissionError(apiError(
+            data,
+            "Interaction results changed. Review the updated results before saving.",
+          ));
+          return;
+        }
+        if (response.status === 409 && action === "save") {
+          setReviewToken("");
+          setAlerts([]);
+        }
         throw new Error(apiError(data, "Unable to save this prescription."));
+      }
+
+      if (action === "review") {
+        if (!isRecord(data) || typeof data.interaction_review_token !== "string") {
+          throw new Error("Unable to verify the interaction review. Please try again.");
+        }
+        setReviewToken(data.interaction_review_token);
+        setAlerts(readAlerts(data));
+        setSuccessMessage("");
+        return;
       }
 
       const id = prescriptionId(data);
@@ -269,6 +337,7 @@ export default function PrescriptionBuilder({
       setNotes("");
       setItems([emptyItem(nextItemKey.current)]);
       nextItemKey.current += 1;
+      setReviewToken("");
     } catch (error) {
       setSubmissionError(
         error instanceof Error ? error.message : "Unable to save this prescription.",
@@ -276,6 +345,7 @@ export default function PrescriptionBuilder({
     } finally {
       submissionInProgress.current = false;
       setSubmitting(false);
+      setSubmissionAction(null);
     }
   }
 
@@ -318,7 +388,10 @@ export default function PrescriptionBuilder({
             <select
               id="consultation-id"
               value={consultationId}
-              onChange={(event) => setConsultationId(event.target.value)}
+              onChange={(event) => {
+                invalidateInteractionReview();
+                setConsultationId(event.target.value);
+              }}
               style={fieldStyle}
             >
               <option value="">Select a consultation</option>
@@ -338,7 +411,10 @@ export default function PrescriptionBuilder({
             <textarea
               id="prescription-notes"
               value={notes}
-              onChange={(event) => setNotes(event.target.value)}
+              onChange={(event) => {
+                invalidateInteractionReview();
+                setNotes(event.target.value);
+              }}
               rows={3}
               style={{ ...fieldStyle, minHeight: 88, resize: "vertical" }}
             />
@@ -358,6 +434,8 @@ export default function PrescriptionBuilder({
               <button
                 type="button"
                 onClick={addItem}
+                disabled={items.length >= 100}
+                aria-describedby={items.length >= 100 ? "prescription-item-limit" : undefined}
                 style={{
                   border: "1px solid #3157a4",
                   borderRadius: 9,
@@ -366,12 +444,22 @@ export default function PrescriptionBuilder({
                   padding: "9px 12px",
                   font: "inherit",
                   fontWeight: 700,
-                  cursor: "pointer",
+                  cursor: items.length >= 100 ? "not-allowed" : "pointer",
                 }}
               >
                 Add item
               </button>
             </div>
+            {items.length >= 100 && (
+              <p
+                id="prescription-item-limit"
+                role="status"
+                aria-live="polite"
+                style={{ color: "#8a4b08", fontSize: 14, margin: "0 0 12px" }}
+              >
+                This prescription has reached the 100-item limit. Remove an item before adding another.
+              </p>
+            )}
 
             <datalist id="available-drugs">
               {drugs.map((drug) => (
@@ -496,28 +584,39 @@ export default function PrescriptionBuilder({
             {successMessage}
           </p>
         )}
-        {successMessage && alerts.length === 0 && (
+        {reviewToken && alerts.length === 0 && !successMessage && (
           <p role="status" style={{ ...noticeStyle, marginTop: 12, background: "#f8fafc", color: "#53627b" }}>
-            The prescription API returned no interaction alerts.
+            No known interaction was found in this check. This does not guarantee that a prescription is safe.
           </p>
         )}
         {alerts.length > 0 && (
           <section
-            role="alert"
+            role="status"
             aria-labelledby="interaction-alerts-title"
             style={{ ...noticeStyle, marginTop: 14, background: "#fff7e6", color: "#7a2e0e" }}
           >
             <h3 id="interaction-alerts-title" style={{ margin: "0 0 10px", fontSize: 16 }}>
-              Interaction alerts returned by the database
+              Review interaction warnings before saving
             </h3>
+            <p style={{ margin: "0 0 10px" }}>
+              These warnings support clinical review and are not a guarantee that a prescription is safe.
+            </p>
             <ul style={{ display: "grid", gap: 8, margin: 0, paddingLeft: 22 }}>
               {alerts.map((alert) => (
-                <li key={alert.alert_id}>
-                  <strong>{alert.severity}</strong>: {alert.message} (prescription items #{alert.item_id} and #{alert.conflicting_item_id})
+                <li key={alert.key}>
+                  <strong>{alert.severity}</strong>: {alert.item_drug_name && alert.conflicting_drug_name
+                    ? `${alert.item_drug_name} with ${alert.conflicting_drug_name}. `
+                    : ""}{alert.message}
                 </li>
               ))}
             </ul>
           </section>
+        )}
+
+        {reviewToken && !successMessage && (
+          <p role="status" style={{ ...noticeStyle, marginTop: 12, background: "#eff6ff", color: "#1e40af" }}>
+            Review the interaction results above, then confirm to save this prescription.
+          </p>
         )}
 
         <button
@@ -536,7 +635,9 @@ export default function PrescriptionBuilder({
             cursor: submitting ? "wait" : "pointer",
           }}
         >
-          {submitting ? "Saving prescription…" : "Save prescription"}
+          {submitting
+            ? submissionAction === "review" ? "Checking interactions…" : "Saving prescription…"
+            : reviewToken ? "Confirm and save prescription" : "Check interactions"}
         </button>
       </form>
     </section>
