@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "seed:users": "node --experimental-strip-types scripts/seed-users.ts",
+    "seed:users": "node --env-file=.env.local --experimental-strip-types scripts/seed-users.ts",
     "embed:seed": "node --experimental-strip-types scripts/embed-seed.ts",
     "migrate:signals": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/migrate-signal-rates.ts",
     "refresh:signals": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/refresh-signal-rates.ts"
