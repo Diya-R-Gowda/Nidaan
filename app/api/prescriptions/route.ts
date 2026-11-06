@@ -355,6 +355,10 @@ export async function POST(request: Request) {
       );
     }
   }
+  const reviewTokenHash =
+    action === "save" && typeof body.interaction_review_token === "string"
+      ? createHash("sha256").update(body.interaction_review_token).digest("hex")
+      : null;
 
   let client: PoolClient | undefined;
   let transactionStarted = false;
@@ -415,6 +419,79 @@ export async function POST(request: Request) {
         { error: "You are not authorized to prescribe for this consultation" },
         { status: 403 },
       );
+    }
+
+    if (reviewTokenHash) {
+      const receiptResult = await client.query<{ entity_id: number | null }>(
+        `SELECT entity_id
+         FROM audit_log
+         WHERE actor_user_id = $1
+           AND action = 'prescription_idempotency_receipt'
+           AND entity_type = 'prescription'
+           AND details ->> 'review_token_sha256' = $2
+         ORDER BY log_id DESC
+         LIMIT 1`,
+        [userId, reviewTokenHash],
+      );
+      const receiptPrescriptionId = receiptResult.rows[0]?.entity_id;
+      if (receiptPrescriptionId) {
+        const existingPrescriptionResult = await client.query<PrescriptionRecord>(
+          `SELECT prescription_id, consultation_id, issued_at, notes
+           FROM prescription
+           WHERE prescription_id = $1
+             AND consultation_id = $2`,
+          [receiptPrescriptionId, consultationId],
+        );
+        const existingPrescription = existingPrescriptionResult.rows[0];
+        if (!existingPrescription) {
+          await client.query("ROLLBACK");
+          transactionStarted = false;
+          return NextResponse.json(
+            { error: "This prescription request was already processed. Refresh before trying again." },
+            { status: 409 },
+          );
+        }
+
+        const existingItemsResult = await client.query<PrescriptionItemRecord>(
+          `SELECT item_id, prescription_id, drug_id, dose, frequency,
+                  duration_days, quantity
+           FROM prescription_item
+           WHERE prescription_id = $1
+           ORDER BY item_id`,
+          [receiptPrescriptionId],
+        );
+        const existingAlertsResult = await client.query<InteractionAlertRecord>(
+          `SELECT alert.alert_id, alert.item_id, alert.conflicting_item_id,
+                  alert.severity, alert.message, alert.raised_at
+           FROM interaction_alert AS alert
+           WHERE alert.item_id IN (
+               SELECT item.item_id
+               FROM prescription_item AS item
+               WHERE item.prescription_id = $1
+           )
+              OR alert.conflicting_item_id IN (
+               SELECT item.item_id
+               FROM prescription_item AS item
+               WHERE item.prescription_id = $1
+           )
+           ORDER BY alert.raised_at, alert.alert_id`,
+          [receiptPrescriptionId],
+        );
+
+        await client.query("COMMIT");
+        transactionStarted = false;
+        return NextResponse.json(
+          {
+            prescription: existingPrescription,
+            items: existingItemsResult.rows,
+            interaction_alerts: existingAlertsResult.rows,
+            warning:
+              "Interaction checks are not a guarantee that a prescription is safe.",
+            replayed: true,
+          },
+          { status: 200 },
+        );
+      }
     }
 
     const uniqueDrugIds = [...new Set(items.map((item) => item.drug_id))];
@@ -519,6 +596,16 @@ export async function POST(request: Request) {
        ORDER BY alert.raised_at, alert.alert_id`,
       [prescription.prescription_id],
     );
+
+    if (reviewTokenHash) {
+      await client.query(
+        `INSERT INTO audit_log
+           (actor_user_id, action, entity_type, entity_id, details)
+         VALUES ($1, 'prescription_idempotency_receipt', 'prescription', $2,
+                 jsonb_build_object('review_token_sha256', $3::text))`,
+        [userId, prescription.prescription_id, reviewTokenHash],
+      );
+    }
 
     await client.query("COMMIT");
     transactionStarted = false;

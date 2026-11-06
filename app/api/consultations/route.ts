@@ -151,15 +151,6 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!["booked", "confirmed"].includes(appointment.status)) {
-      await client.query("ROLLBACK");
-      transactionStarted = false;
-      return NextResponse.json(
-        { error: "Appointment is not available for consultation" },
-        { status: 409 },
-      );
-    }
-
     const existingResult = await client.query(
       `SELECT consultation_id
        FROM consultation
@@ -170,7 +161,19 @@ export async function POST(request: Request) {
       await client.query("ROLLBACK");
       transactionStarted = false;
       return NextResponse.json(
-        { error: "A consultation is already recorded for this appointment" },
+        {
+          error: "A consultation is already recorded for this appointment",
+          consultation_id: existingResult.rows[0].consultation_id,
+        },
+        { status: 409 },
+      );
+    }
+
+    if (!["booked", "confirmed"].includes(appointment.status)) {
+      await client.query("ROLLBACK");
+      transactionStarted = false;
+      return NextResponse.json(
+        { error: "Appointment is not available for consultation" },
         { status: 409 },
       );
     }

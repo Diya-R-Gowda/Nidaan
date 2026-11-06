@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import type { PoolClient } from "pg";
 import { pool } from "@/lib/db";
 import { requireRole, type Session } from "@/lib/auth";
@@ -25,18 +25,128 @@ function isPositiveInt32(value: unknown): value is number {
   );
 }
 
-export function GET() {
-  return requireAppointmentsReadRole();
-}
-
-async function requireAppointmentsReadRole() {
+export async function GET(request: NextRequest) {
+  let session: Session;
   try {
     const authorization = await requireRole(["receptionist", "prescriber"]);
     if (authorization instanceof NextResponse) return authorization;
-    return NextResponse.json({ resource: "appointments" });
+    session = authorization;
   } catch {
     return NextResponse.json(
       { error: "Unable to verify authorization" },
+      { status: 500 },
+    );
+  }
+
+  const params = request.nextUrl.searchParams;
+  const from = params.get("from");
+  const to = params.get("to");
+  const limitValue = params.get("limit");
+  const offsetValue = params.get("offset");
+  const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+  const isValidDate = (value: string) =>
+    isoDate.test(value) &&
+    Number.isFinite(Date.parse(`${value}T00:00:00Z`)) &&
+    new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+
+  let fromDate = from;
+  let toDate = to;
+  if (fromDate === null && toDate === null) {
+    const dateParts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const dateValues = Object.fromEntries(dateParts.map((part) => [part.type, part.value]));
+    const today = `${dateValues.year}-${dateValues.month}-${dateValues.day}`;
+    const year = Number(dateValues.year);
+    const month = Number(dateValues.month);
+    const day = Number(dateValues.day);
+    const start = new Date(Date.UTC(year, month - 1, day));
+    const end = new Date(start.getTime() + 6 * 24 * 60 * 60 * 1000);
+    fromDate = today;
+    toDate = end.toISOString().slice(0, 10);
+  }
+
+  if (
+    fromDate === null ||
+    toDate === null ||
+    !isValidDate(fromDate) ||
+    !isValidDate(toDate)
+  ) {
+    return NextResponse.json(
+      { error: "from and to must be valid YYYY-MM-DD dates" },
+      { status: 400 },
+    );
+  }
+
+  const startMs = Date.parse(`${fromDate}T00:00:00Z`);
+  const endMs = Date.parse(`${toDate}T00:00:00Z`);
+  const dayCount = (endMs - startMs) / (24 * 60 * 60 * 1000);
+  if (dayCount < 0 || dayCount > 30) {
+    return NextResponse.json(
+      { error: "Date range must be ordered and no longer than 31 days" },
+      { status: 400 },
+    );
+  }
+
+  const limit = limitValue === null ? 100 : /^\d+$/.test(limitValue) ? Number(limitValue) : NaN;
+  const offset = offsetValue === null ? 0 : /^\d+$/.test(offsetValue) ? Number(offsetValue) : NaN;
+  if (
+    !Number.isInteger(limit) || limit < 1 || limit > 200 ||
+    !Number.isInteger(offset) || offset < 0 || offset > 1_000_000
+  ) {
+    return NextResponse.json(
+      { error: "limit must be 1–200 and offset must be a non-negative integer" },
+      { status: 400 },
+    );
+  }
+
+  try {
+    let doctorId: number | null = null;
+    if (session.role === "prescriber") {
+      const doctor = await pool.query<{ doctor_id: number }>(
+        `SELECT doctor_id
+         FROM doctor
+         WHERE user_id = $1`,
+        [session.userId],
+      );
+      if (!doctor.rows[0]) {
+        return NextResponse.json({ error: "Prescriber profile not found" }, { status: 403 });
+      }
+      doctorId = doctor.rows[0].doctor_id;
+    }
+
+    const result = await pool.query(
+      `SELECT a.appointment_id,
+              a.slot_start,
+              a.slot_end,
+              a.mode,
+              a.status,
+              p.full_name AS patient_name,
+              d.doctor_id,
+              account.full_name AS doctor_name
+       FROM appointment AS a
+       JOIN patient AS p ON p.patient_id = a.patient_id
+       JOIN doctor AS d ON d.doctor_id = a.doctor_id
+       JOIN user_account AS account ON account.user_id = d.user_id
+       WHERE a.slot_start >= ($1::date::timestamp AT TIME ZONE 'Asia/Kolkata')
+         AND a.slot_start < (($2::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')
+         AND ($3::int IS NULL OR a.doctor_id = $3)
+       ORDER BY a.slot_start, a.appointment_id
+       LIMIT $4 OFFSET $5`,
+      [fromDate, toDate, doctorId, limit + 1, offset],
+    );
+    const hasMore = result.rows.length > limit;
+    return NextResponse.json({
+      appointments: result.rows.slice(0, limit),
+      pagination: { limit, offset, has_more: hasMore },
+      date_range: { from: fromDate, to: toDate, time_zone: "Asia/Kolkata" },
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "Unable to load appointments" },
       { status: 500 },
     );
   }

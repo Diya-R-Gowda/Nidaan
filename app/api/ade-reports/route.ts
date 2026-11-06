@@ -12,6 +12,55 @@ interface AdeReportBody {
 
 interface ReportRow {
   report_id: number;
+  severity_score: number | string;
+}
+
+const pageSize = 25;
+
+function parsePage(value: string | null): number | null {
+  if (value === null) return 1;
+  if (!/^[1-9]\d*$/.test(value)) return null;
+  const page = Number(value);
+  return Number.isSafeInteger(page) && page <= 100_000 ? page : null;
+}
+
+export async function GET(request: Request) {
+  let access: Awaited<ReturnType<typeof requireRole>>;
+  try {
+    access = await requireRole(["pharmacovigilance"]);
+  } catch {
+    return NextResponse.json({ error: "Unable to verify authorization" }, { status: 500 });
+  }
+  if (access instanceof NextResponse) return access;
+
+  const page = parsePage(new URL(request.url).searchParams.get("page"));
+  if (page === null) {
+    return NextResponse.json({ error: "page must be a positive integer" }, { status: 400 });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT r.report_id,
+              r.onset_date,
+              r.reported_at,
+              COALESCE(r.severity_score, fn_severity_score(r.report_id)) AS severity_score,
+              r.status,
+              drug.drug_name,
+              count(*) OVER()::int AS total_count
+       FROM ade_report AS r
+       LEFT JOIN prescription_item AS item ON item.item_id = r.item_id
+       LEFT JOIN drug ON drug.drug_id = item.drug_id
+       WHERE r.status IN ('new', 'under_review')
+       ORDER BY r.reported_at DESC, r.report_id DESC
+       LIMIT $1 OFFSET $2`,
+      [pageSize, (page - 1) * pageSize],
+    );
+    const total = result.rows[0]?.total_count ?? 0;
+    const reports = result.rows.map(({ total_count: _totalCount, ...report }) => report);
+    return NextResponse.json({ reports, page, pageSize, total });
+  } catch {
+    return NextResponse.json({ error: "Unable to load the ADE review inbox" }, { status: 500 });
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -151,7 +200,7 @@ export async function POST(request: Request) {
         );
       }
 
-      const result = await client.query<ReportRow>(
+      const result = await client.query<{ report_id: number }>(
         `INSERT INTO ade_report (
            patient_id, item_id, narrative, narrative_vec, onset_date, reported_by, status
          )
@@ -167,11 +216,22 @@ export async function POST(request: Request) {
         ],
       );
 
+      const scored = await client.query<ReportRow>(
+        `UPDATE ade_report
+         SET severity_score = fn_severity_score(report_id)
+         WHERE report_id = $1
+         RETURNING report_id, severity_score`,
+        [result.rows[0].report_id],
+      );
+
       await client.query("COMMIT");
       transactionStarted = false;
 
       return NextResponse.json(
-        { reportId: result.rows[0].report_id },
+        {
+          reportId: scored.rows[0].report_id,
+          severityScore: scored.rows[0].severity_score,
+        },
         { status: 201 },
       );
     } catch (error) {

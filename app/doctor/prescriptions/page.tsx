@@ -24,6 +24,10 @@ type ConsultationOption = {
   appointment_time: string;
 };
 
+type PrescriptionsPageProps = {
+  searchParams: Promise<{ consultationId?: string | string[] }>;
+};
+
 const mainStyle = {
   minHeight: "100vh",
   background: "#f4f7fb",
@@ -56,7 +60,13 @@ function LoadingBuilder() {
   );
 }
 
-async function BuilderOptions({ userId }: { userId: number }) {
+async function BuilderOptions({
+  userId,
+  requestedConsultationId,
+}: {
+  userId: number;
+  requestedConsultationId?: number;
+}) {
   try {
     const doctorResult = await pool.query<{ doctor_id: number }>(
       `SELECT d.doctor_id
@@ -104,11 +114,17 @@ async function BuilderOptions({ userId }: { userId: number }) {
         appointment_time: formatAppointmentTime(consultation.slot_start),
       }),
     );
+    const initialConsultationId = consultations.some(
+      (consultation) => consultation.consultation_id === requestedConsultationId,
+    )
+      ? requestedConsultationId
+      : undefined;
 
     return (
       <PrescriptionBuilder
         consultations={consultations}
         drugs={drugResult.rows}
+        initialConsultationId={initialConsultationId}
       />
     );
   } catch {
@@ -122,8 +138,16 @@ async function BuilderOptions({ userId }: { userId: number }) {
   }
 }
 
-export default async function PrescriptionsPage() {
-  const session = await readSession();
+function parseConsultationId(value: string | string[] | undefined): number | undefined {
+  if (typeof value !== "string" || !/^[1-9]\d*$/.test(value)) return undefined;
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id <= 2_147_483_647 ? id : undefined;
+}
+
+export default async function PrescriptionsPage({
+  searchParams,
+}: PrescriptionsPageProps) {
+  const [session, search] = await Promise.all([readSession(), searchParams]);
 
   if (!session) {
     redirect("/login");
@@ -162,7 +186,10 @@ export default async function PrescriptionsPage() {
           </p>
         </header>
         <Suspense fallback={<LoadingBuilder />}>
-          <BuilderOptions userId={session.userId} />
+          <BuilderOptions
+            userId={session.userId}
+            requestedConsultationId={parseConsultationId(search.consultationId)}
+          />
         </Suspense>
       </div>
     </main>

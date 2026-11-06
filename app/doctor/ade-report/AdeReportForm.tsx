@@ -5,7 +5,7 @@ import { useState, type FormEvent } from "react";
 type PatientOption = { patient_id: number; full_name: string };
 type ItemOption = {
   item_id: number;
-  patient_name: string;
+  patient_id: number;
   drug_name: string;
   dose: string;
 };
@@ -27,9 +27,15 @@ export default function AdeReportForm({
   patients: PatientOption[];
   items: ItemOption[];
 }) {
+  const [patientId, setPatientId] = useState("");
+  const [itemId, setItemId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [reportId, setReportId] = useState<number | null>(null);
+  const selectedPatientId = Number(patientId);
+  const patientItems = patientId
+    ? items.filter((item) => item.patient_id === selectedPatientId)
+    : [];
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -74,6 +80,8 @@ export default function AdeReportForm({
       if (response.ok && responseRecord && Number.isSafeInteger(responseRecord.reportId)) {
         setReportId(responseRecord.reportId as number);
         form.reset();
+        setPatientId("");
+        setItemId("");
       } else if (response.status === 404) {
         setError("The selected patient or prescription item is not available through your appointments.");
       } else if (response.status === 400) {
@@ -97,16 +105,39 @@ export default function AdeReportForm({
       <form onSubmit={handleSubmit}>
         <div style={{ display: "grid", gap: 16 }}>
           <label htmlFor="patientId" style={{ display: "grid", gap: 6, fontWeight: 600 }}>Patient
-            <select id="patientId" name="patientId" required style={fieldStyle} defaultValue="">
+            <select
+              id="patientId"
+              name="patientId"
+              required
+              style={fieldStyle}
+              value={patientId}
+              onChange={(event) => {
+                setPatientId(event.target.value);
+                setItemId("");
+              }}
+            >
               <option value="" disabled>Select a patient</option>
               {patients.map((patient) => <option key={patient.patient_id} value={patient.patient_id}>{patient.full_name} (#{patient.patient_id})</option>)}
             </select>
           </label>
           <label htmlFor="itemId" style={{ display: "grid", gap: 6, fontWeight: 600 }}>Suspected prescription item <span style={{ color: "#596579", fontSize: 13, fontWeight: 400 }}>Optional if the item is unknown</span>
-            <select id="itemId" name="itemId" style={fieldStyle} defaultValue="">
+            <select
+              id="itemId"
+              name="itemId"
+              style={fieldStyle}
+              value={itemId}
+              onChange={(event) => setItemId(event.target.value)}
+              disabled={!patientId || patientItems.length === 0}
+              aria-describedby={patientId && patientItems.length === 0 ? "item-help" : undefined}
+            >
               <option value="">Unknown / not applicable</option>
-              {items.map((item) => <option key={item.item_id} value={item.item_id}>{item.drug_name} — {item.patient_name} · item #{item.item_id}</option>)}
+              {patientItems.map((item) => <option key={item.item_id} value={item.item_id}>{item.drug_name} — {item.dose} · item #{item.item_id}</option>)}
             </select>
+            {patientId && patientItems.length === 0 && (
+              <span id="item-help" style={{ color: "#596579", fontSize: 13, fontWeight: 400 }}>
+                No prescription items are available for this patient; the report can still be submitted with an unknown item.
+              </span>
+            )}
           </label>
           <label htmlFor="onsetDate" style={{ display: "grid", gap: 6, fontWeight: 600 }}>Symptom onset date<input id="onsetDate" name="onsetDate" type="date" required style={fieldStyle} /></label>
           <label htmlFor="narrative" style={{ display: "grid", gap: 6, fontWeight: 600 }}>Narrative<textarea id="narrative" name="narrative" minLength={20} required rows={6} aria-describedby="narrative-hint" style={{ ...fieldStyle, minHeight: 150, resize: "vertical" }} /></label>

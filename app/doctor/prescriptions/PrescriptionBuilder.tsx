@@ -42,6 +42,7 @@ type PrescriptionBuilderProps = {
   consultations: ConsultationOption[];
   drugs: DrugOption[];
   loadError?: string;
+  initialConsultationId?: number;
 };
 
 const fieldStyle = {
@@ -147,8 +148,11 @@ export default function PrescriptionBuilder({
   consultations,
   drugs,
   loadError,
+  initialConsultationId,
 }: PrescriptionBuilderProps) {
-  const [consultationId, setConsultationId] = useState("");
+  const [consultationId, setConsultationId] = useState(
+    initialConsultationId ? String(initialConsultationId) : "",
+  );
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<PrescriptionItemForm[]>([emptyItem(1)]);
   const nextItemKey = useRef(2);

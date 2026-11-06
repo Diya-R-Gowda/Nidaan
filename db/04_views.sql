@@ -15,7 +15,8 @@ JOIN prescription p ON p.prescription_id = pi.prescription_id
 JOIN consultation c ON c.consultation_id = p.consultation_id
 JOIN appointment a ON a.appointment_id = c.appointment_id
 LEFT JOIN ade_report r ON r.item_id = pi.item_id
-GROUP BY d.drug_id, d.drug_name;
+GROUP BY d.drug_id, d.drug_name
+HAVING COUNT(DISTINCT a.patient_id) >= 10;
 
 CREATE VIEW vw_doctor_schedule AS
 SELECT
