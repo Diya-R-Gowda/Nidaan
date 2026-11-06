@@ -45,12 +45,12 @@ function formatAppointmentTime(value: Date | string): string {
 function LoadingSchedule() {
   return (
     <p role="status" style={{ ...cardStyle, color: "#53627b" }}>
-      Loading today&apos;s appointments…
+      Loading upcoming appointments…
     </p>
   );
 }
 
-async function TodaySchedule({ userId }: { userId: number }) {
+async function UpcomingSchedule({ userId }: { userId: number }) {
   try {
     const doctorResult = await pool.query<{ doctor_id: number }>(
       `SELECT d.doctor_id
@@ -73,11 +73,8 @@ async function TodaySchedule({ userId }: { userId: number }) {
 
     const scheduleResult = await pool.query<ScheduleAppointment>(
       `WITH local_day AS (
-         SELECT
-           date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata')
-             AT TIME ZONE 'Asia/Kolkata' AS starts_at,
-           (date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') + INTERVAL '1 day')
-             AT TIME ZONE 'Asia/Kolkata' AS ends_at
+         SELECT date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata')
+                  AT TIME ZONE 'Asia/Kolkata' AS starts_at
        )
        SELECT
          schedule.appointment_id,
@@ -94,7 +91,7 @@ async function TodaySchedule({ userId }: { userId: number }) {
        CROSS JOIN local_day
        WHERE schedule.doctor_id = $1
          AND schedule.slot_start >= local_day.starts_at
-         AND schedule.slot_start < local_day.ends_at
+         AND schedule.appointment_status IN ('booked', 'confirmed')
        ORDER BY schedule.slot_start, schedule.appointment_id`,
       [doctorId],
     );
@@ -104,19 +101,19 @@ async function TodaySchedule({ userId }: { userId: number }) {
     return (
       <>
         <p style={{ margin: "0 0 18px", color: "#596579" }}>
-          {appointments.length} upcoming {appointments.length === 1 ? "appointment" : "appointments"} today
-          <span> · Times shown in India Standard Time</span>
+          {appointments.length} upcoming {appointments.length === 1 ? "appointment" : "appointments"}
+          <span> · From today onward; dates and times shown in India Standard Time</span>
         </p>
         {appointments.length === 0 ? (
           <section style={cardStyle}>
-            <h2 style={{ margin: "0 0 8px", fontSize: 19 }}>No appointments today</h2>
+            <h2 style={{ margin: "0 0 8px", fontSize: 19 }}>No upcoming appointments</h2>
             <p style={{ margin: 0, color: "#596579", lineHeight: 1.6 }}>
-              You have no upcoming booked or confirmed appointments for today.
+              You have no booked or confirmed appointments scheduled for today or later.
             </p>
           </section>
         ) : (
           <ol
-            aria-label="Today's appointments"
+            aria-label="Upcoming appointments"
             style={{ display: "grid", gap: 14, listStyle: "none", margin: 0, padding: 0 }}
           >
             {appointments.map((appointment) => (
@@ -176,6 +173,23 @@ async function TodaySchedule({ userId }: { userId: number }) {
                       </dd>
                     </div>
                   </dl>
+                  <a
+                    href={`/doctor/consult/${appointment.appointment_id}`}
+                    style={{
+                      display: "inline-flex",
+                      minHeight: 44,
+                      alignItems: "center",
+                      marginTop: 18,
+                      borderRadius: 9,
+                      background: "#3157a4",
+                      color: "#fff",
+                      padding: "10px 16px",
+                      fontWeight: 700,
+                      textDecoration: "none",
+                    }}
+                  >
+                    {appointment.consultation_id ? "Open consultation" : "Start consultation"}
+                  </a>
                 </article>
               </li>
             ))}
@@ -186,7 +200,7 @@ async function TodaySchedule({ userId }: { userId: number }) {
   } catch {
     return (
       <p role="alert" style={{ ...cardStyle, color: "#a32020" }}>
-        Today&apos;s appointments could not be loaded. Please try again later.
+        Upcoming appointments could not be loaded. Please try again later.
       </p>
     );
   }
@@ -219,7 +233,7 @@ export default async function DoctorPage() {
             Doctor dashboard
           </p>
           <h1 style={{ margin: "8px 0 0", fontSize: 32, letterSpacing: "-0.03em" }}>
-            Today&apos;s appointments
+            Upcoming appointments
           </h1>
           <a
             href="/doctor/prescriptions"
@@ -238,7 +252,7 @@ export default async function DoctorPage() {
           </a>
         </header>
         <Suspense fallback={<LoadingSchedule />}>
-          <TodaySchedule userId={session.userId} />
+          <UpcomingSchedule userId={session.userId} />
         </Suspense>
       </div>
     </main>
