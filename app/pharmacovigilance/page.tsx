@@ -88,9 +88,9 @@ async function SignalDashboard({
     if (signals.length === 0) {
       return (
         <section style={cardStyle}>
-          <h2 style={{ margin: "0 0 8px", fontSize: 19 }}>No signal data available</h2>
+          <h2 style={{ margin: "0 0 8px", fontSize: 19 }}>No eligible signal rates</h2>
           <p style={{ margin: 0, color: "#596579", lineHeight: 1.6 }}>
-            The drug signal view has no records to display yet.
+            No drug currently meets the minimum of 10 distinct exposed patients required for a signal rate to be shown.
           </p>
         </section>
       );
@@ -231,6 +231,9 @@ export default async function PharmacovigilancePage({
           <p style={{ margin: "10px 0 0", color: "#596579", lineHeight: 1.6 }}>
             Aggregate adverse-event rates by drug. This view contains no patient-identifying data.
           </p>
+          <a href="/pharmacovigilance/reports" style={{ display: "inline-block", marginTop: 12, color: "#3157a4", fontWeight: 600 }}>
+            Open ADE report inbox →
+          </a>
         </header>
         <Suspense fallback={<LoadingSignals />}>
           <SignalDashboard searchParams={searchParams} />

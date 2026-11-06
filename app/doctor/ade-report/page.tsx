@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 type PatientOption = { patient_id: number; full_name: string };
 type ItemOption = {
   item_id: number;
-  patient_name: string;
+  patient_id: number;
   drug_name: string;
   dose: string;
 };
@@ -46,16 +46,15 @@ export default async function AdeReportPage() {
           [doctorId],
         ),
         pool.query<ItemOption>(
-          `SELECT DISTINCT item.item_id, patient.full_name AS patient_name,
+          `SELECT DISTINCT item.item_id, appointment.patient_id,
                   drug.drug_name, item.dose
            FROM prescription_item AS item
            JOIN drug ON drug.drug_id = item.drug_id
            JOIN prescription ON prescription.prescription_id = item.prescription_id
            JOIN consultation ON consultation.consultation_id = prescription.consultation_id
            JOIN appointment ON appointment.appointment_id = consultation.appointment_id
-           JOIN patient ON patient.patient_id = appointment.patient_id
            WHERE appointment.doctor_id = $1
-           ORDER BY patient.full_name, drug.drug_name, item.item_id`,
+           ORDER BY appointment.patient_id, drug.drug_name, item.item_id`,
           [doctorId],
         ),
       ]);

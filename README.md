@@ -667,7 +667,9 @@ demonstration.
 
 **`fn_severity_score(report_id)`** — derives a numeric severity from
 narrative length, presence of flagged terms, patient age and drug
-interaction severity.
+interaction severity. ADE submission calculates and stores this score in the
+same transaction as the report. It is a project heuristic, not a clinical
+assessment or diagnosis.
 
 **`fn_signal_rate(drug_id, from_date, to_date)`** — returns reports,
 exposed patient count, and the rate.
@@ -675,8 +677,29 @@ exposed patient count, and the rate.
 ### 4. Views
 
 **`vw_drug_signal_rates`** (materialized) — per drug: distinct patients
-prescribed, adverse-event count, and rate per hundred exposed. Refreshed
-on a schedule.
+prescribed, adverse-event count, and rate per hundred exposed. Drugs with
+fewer than 10 distinct exposed patients are suppressed. Refreshed on a
+schedule because PostgreSQL materialized views do not update with source rows.
+
+For an existing installation, apply the threshold migration once after
+reviewing its non-cascading materialized-view replacement:
+
+```powershell
+$env:NIDAAN_EXPECTED_DATABASE = "nidaan_verify"
+# Configure NIDAAN_MIGRATION_DATABASE_URL with the migration-owner connection.
+npm run migrate:signals
+```
+
+Run `npm run refresh:signals` after a bulk import or from a scheduled job to
+refresh the aggregate. Both commands require `NIDAAN_EXPECTED_DATABASE` to
+match `current_database()` before they execute. Configure the refresh job with
+`NIDAAN_MAINTENANCE_DATABASE_URL`, a maintenance/owner connection; the
+application `DATABASE_URL` is not used because materialized-view refresh needs
+ownership. On Windows Task Scheduler, provide that protected connection and
+the expected database name, then run the refresh command during a quiet
+period. Do not call `REFRESH MATERIALIZED VIEW` from an application write
+transaction or trigger. The refresh command logs only the database name and
+number of qualifying aggregate rows.
 
 **`vw_doctor_schedule`** — a doctor's upcoming appointments joined with
 patient names and consultation status.

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { readSession } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import SimilarReports from "./SimilarReports";
+import ReviewStatusActions from "./ReviewStatusActions";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -70,7 +71,9 @@ export default async function PharmacovigilanceReportPage({ params }: RouteConte
   let report: ReportDetails | undefined;
   try {
     const result = await pool.query<ReportDetails>(
-      `SELECT report_id, narrative, onset_date, reported_at, severity_score, status
+      `SELECT report_id, narrative, onset_date, reported_at,
+              COALESCE(severity_score, fn_severity_score(report_id)) AS severity_score,
+              status
        FROM ade_report
        WHERE report_id = $1`,
       [reportId],
@@ -103,8 +106,8 @@ export default async function PharmacovigilanceReportPage({ params }: RouteConte
   return (
     <main style={{ minHeight: "100vh", background: "#f4f7fb", padding: "36px 20px 56px", color: "#172033" }}>
       <div style={{ width: "100%", maxWidth: 1040, margin: "0 auto" }}>
-        <a href="/pharmacovigilance" style={{ display: "inline-block", marginBottom: 20, color: "#3157a4" }}>
-          ← Back to signal dashboard
+        <a href="/pharmacovigilance/reports" style={{ display: "inline-block", marginBottom: 20, color: "#3157a4" }}>
+          ← Back to report inbox
         </a>
         <header style={{ marginBottom: 20 }}>
           <p style={{ margin: 0, color: "#53627b", fontSize: 13, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>
@@ -133,8 +136,15 @@ export default async function PharmacovigilanceReportPage({ params }: RouteConte
               <dd style={{ margin: "4px 0 0", fontWeight: 600, textTransform: "capitalize" }}>{report.status?.replace("_", " ") ?? "Not recorded"}</dd>
             </div>
           </dl>
+          <p style={{ margin: "-10px 0 20px", color: "#667085", fontSize: 13 }}>
+            This is the project&apos;s rule-based heuristic, not a validated clinical severity scale.
+          </p>
           <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>Reaction narrative</h3>
           <p style={{ margin: 0, lineHeight: 1.7, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{report.narrative}</p>
+        </section>
+
+        <section style={{ ...cardStyle, marginBottom: 20 }}>
+          <ReviewStatusActions reportId={report.report_id} status={report.status} />
         </section>
 
         <SimilarReports reportId={report.report_id} />
