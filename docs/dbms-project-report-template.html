@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Nidaan DBMS Project Report</title>
+  <style>
+    @page { size: A4; margin: 20mm 16mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; color: #172033; line-height: 1.45; font-size: 10.5pt; }
+    h1 { color: #173b73; font-size: 25pt; margin: 0 0 10px; }
+    h2 { color: #173b73; border-bottom: 2px solid #d6e2f5; padding-bottom: 5px; margin-top: 28px; }
+    h3 { color: #3157a4; margin-top: 20px; }
+    .cover { min-height: 240mm; display: flex; flex-direction: column; justify-content: center; text-align: center; page-break-after: always; }
+    .cover h1 { font-size: 30pt; }
+    .subtitle { font-size: 16pt; color: #53627b; }
+    .meta { margin: 30px auto; border-collapse: collapse; min-width: 75%; }
+    .meta td, .meta th, table td, table th { border: 1px solid #b9c7dc; padding: 7px; vertical-align: top; }
+    table { border-collapse: collapse; width: 100%; margin: 10px 0 18px; }
+    th { background: #eaf1fb; text-align: left; }
+    .placeholder { color: #8a4b08; background: #fff7e6; border-left: 4px solid #e0a23b; padding: 9px 12px; }
+    .code { background: #f3f5f8; border: 1px solid #d8dee8; border-radius: 4px; padding: 10px; font-family: Consolas, monospace; font-size: 8.5pt; white-space: pre-wrap; }
+    .figure { border: 1px dashed #8294ad; min-height: 55mm; display: flex; align-items: center; justify-content: center; color: #53627b; margin: 10px 0; }
+    .small { font-size: 9pt; color: #53627b; }
+    .page-break { page-break-before: always; }
+    li { margin-bottom: 5px; }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <h1>Nidaan</h1>
+    <p class="subtitle">Consultation Management and Adverse Drug Event Detection</p>
+    <p>DBMS Project Report</p>
+    <table class="meta">
+      <tr><th>Student name</th><td>[Enter name]</td></tr>
+      <tr><th>SRN</th><td>[Enter SRN]</td></tr>
+      <tr><th>Course / section</th><td>[Enter course and section]</td></tr>
+      <tr><th>Faculty / institution</th><td>[Enter faculty and institution]</td></tr>
+      <tr><th>Submission date</th><td>[Enter date]</td></tr>
+    </table>
+    <p class="placeholder">Replace all bracketed placeholders before submission.</p>
+  </section>
+
+  <h2>1. Title</h2>
+  <p><strong>Nidaan: Consultation Management and Adverse Drug Event Detection</strong></p>
+  <p>Nidaan is a clinic management platform that connects appointment booking,
+  consultations, prescriptions, adverse-event reporting, pharmacovigilance
+  analysis and invoice generation.</p>
+
+  <h2>2. Students SRN and Name</h2>
+  <table>
+    <tr><th>#</th><th>Name</th><th>SRN</th><th>Section</th><th>Contribution</th></tr>
+    <tr><td>1</td><td>[Student 1]</td><td>[SRN]</td><td>[Section]</td><td>[Contribution]</td></tr>
+    <tr><td>2</td><td>[Student 2]</td><td>[SRN]</td><td>[Section]</td><td>[Contribution]</td></tr>
+  </table>
+
+  <h2>3. Abstract</h2>
+  <p>Nidaan is a clinic consultation and adverse drug event detection platform.
+  It stores patients, appointments, consultations, prescriptions, drugs,
+  interactions, invoices and safety reports in PostgreSQL. Database
+  constraints preserve integrity, transactions protect concurrent booking and
+  billing, and triggers automatically create interaction alerts and reminders.
+  Adverse-event narratives are embedded with a 384-dimensional language model
+  vector and searched with pgvector, allowing semantically similar reports to
+  be retrieved even when patients use different words. The system supports
+  receptionist, prescriber, pharmacovigilance and administrator roles through
+  a Next.js interface and server-side authorization.</p>
+
+  <h2>4. Tech Stack</h2>
+  <table>
+    <tr><th>Layer</th><th>Technology</th><th>Purpose</th></tr>
+    <tr><td>Frontend</td><td>Next.js App Router, React, TypeScript</td><td>Role-specific application pages and forms.</td></tr>
+    <tr><td>API</td><td>Next.js route handlers</td><td>Protected server-side operations.</td></tr>
+    <tr><td>Database</td><td>PostgreSQL</td><td>Relational clinical, appointment and billing data.</td></tr>
+    <tr><td>Vector database feature</td><td>pgvector</td><td>384-dimensional embeddings and cosine similarity.</td></tr>
+    <tr><td>Database driver</td><td>node-postgres (`pg`)</td><td>Connection pooling and parameterized queries.</td></tr>
+    <tr><td>Authentication</td><td>bcrypt and signed httpOnly cookies</td><td>Password hashing, session creation and role guards.</td></tr>
+    <tr><td>Embedding model</td><td>Xenova/all-MiniLM-L6-v2</td><td>Converts adverse-event text into vectors.</td></tr>
+    <tr><td>Tools</td><td>Git, GitHub, PowerShell, psql</td><td>Version control, development and database testing.</td></tr>
+  </table>
+
+  <h2>5. SQL — Database Commands</h2>
+  <h3>5.1 Schema and tables</h3>
+  <p>The schema begins by enabling pgvector and creates the relational tables:
+  <code>user_account</code>, <code>doctor</code>, <code>patient</code>,
+  <code>appointment</code>, <code>consultation</code>, <code>drug</code>,
+  <code>prescription</code>, <code>prescription_item</code>,
+  <code>drug_interaction</code>, <code>interaction_alert</code>,
+  <code>ade_report</code>, <code>invoice</code>, <code>invoice_line</code>,
+  <code>reminder_queue</code>, <code>audit_log</code> and
+  <code>patient_allergy</code>.</p>
+  <div class="code">CREATE EXTENSION IF NOT EXISTS vector;
+psql -d nidaan -f db/01_schema.sql
+psql -d nidaan -f db/02_triggers.sql
+psql -d nidaan -f db/03_procedures.sql
+psql -d nidaan -f db/04_views.sql
+psql -d nidaan -f db/05_seed.sql</div>
+  <h3>5.2 Constraints and integrity</h3>
+  <ul>
+    <li>Primary keys identify every row; foreign keys connect the clinical chain.</li>
+    <li>Role, appointment mode, status, positive quantity and non-negative price use CHECK constraints.</li>
+    <li>Online appointments require a meeting link; in-person appointments cannot have one.</li>
+    <li><code>drug_a_id &lt; drug_b_id</code> prevents reverse duplicate interaction pairs.</li>
+    <li><code>ON DELETE RESTRICT</code> protects historical clinical data.</li>
+  </ul>
+  <h3>5.3 Required SQL evidence</h3>
+  <table>
+    <tr><th>Evidence</th><th>Command / result to include</th><th>Status</th></tr>
+    <tr><td>Tables</td><td><code>\dt</code> output</td><td>[Insert screenshot]</td></tr>
+    <tr><td>Constraints</td><td><code>\d appointment</code> and <code>\d drug_interaction</code></td><td>[Insert screenshot]</td></tr>
+    <tr><td>Triggers</td><td>Interaction, reminder and audit trigger demonstrations</td><td>[Insert screenshot]</td></tr>
+    <tr><td>Procedures</td><td>Invoice and severity function output</td><td>[Insert screenshot]</td></tr>
+    <tr><td>Views</td><td>View or materialized-view query output</td><td>[Insert screenshot]</td></tr>
+    <tr><td>Indexes</td><td><code>\di</code> output, including HNSW and GIN indexes</td><td>[Insert screenshot]</td></tr>
+  </table>
+  <div class="figure">Insert SQL command/output screenshots here</div>
+
+  <h2>6. NoSQL / Vector Database Commands</h2>
+  <p>Nidaan uses PostgreSQL with the pgvector extension rather than a separate
+  NoSQL server. The vector component is appropriate for free-text narratives,
+  while the relational component preserves clinical integrity.</p>
+  <h3>6.1 Embedding generation</h3>
+  <div class="code">npm run embed:seed</div>
+  <p>This embeds every adverse-event report whose <code>narrative_vec</code>
+  is null. The model returns a normalized 384-dimensional vector.</p>
+  <h3>6.2 Full-text baseline</h3>
+  <div class="code">SELECT report_id, narrative
+FROM ade_report
+WHERE narrative_tsv @@ plainto_tsquery('english', 'bleeding gums');</div>
+  <h3>6.3 Vector similarity</h3>
+  <div class="code">SELECT report_id, narrative,
+       1 - (narrative_vec &lt;=&gt; $1) AS similarity
+FROM ade_report
+WHERE narrative_vec IS NOT NULL
+ORDER BY narrative_vec &lt;=&gt; $1
+LIMIT 5;</div>
+  <p>The vector query can retrieve semantically similar wording such as
+  “blood while brushing teeth, unusual bruising” for a report mentioning
+  “bleeding gums and purple patches on arms”.</p>
+  <div class="figure">Insert vector query and similarity-result screenshot here</div>
+
+  <h2>7. Next.js — Project Tree Structure</h2>
+  <div class="code">nidaan/
+├── app/
+│   ├── (auth)/login/
+│   ├── reception/
+│   ├── doctor/
+│   ├── pharmacovigilance/
+│   ├── admin/
+│   └── api/
+├── db/
+│   ├── 01_schema.sql
+│   ├── 02_triggers.sql
+│   ├── 03_procedures.sql
+│   ├── 04_views.sql
+│   └── 05_seed.sql
+├── lib/
+│   ├── db.ts
+│   ├── auth.ts
+│   └── embeddings.ts
+├── scripts/
+├── docs/
+├── package.json
+└── README.md</div>
+  <p>Pages in <code>app</code> render the interface. Route handlers under
+  <code>app/api</code> perform protected database operations. The
+  <code>lib</code> folder contains shared database, authentication and
+  embedding logic.</p>
+
+  <h2>8. Sample Screenshots of Application Code and Demo</h2>
+  <p>Pair each application screenshot with a short code excerpt and a
+  one-sentence explanation.</p>
+  <table>
+    <tr><th>Figure</th><th>Recommended screenshot</th><th>Explanation</th></tr>
+    <tr><td>8.1</td><td>Login page and login route</td><td>bcrypt verifies the password and a signed session cookie is created.</td></tr>
+    <tr><td>8.2</td><td>Receptionist booking screen</td><td>A receptionist selects a patient, doctor, time and appointment mode.</td></tr>
+    <tr><td>8.3</td><td>Doctor consultation screen</td><td>The doctor records complaint, notes and diagnosis.</td></tr>
+    <tr><td>8.4</td><td>Prescription builder with interaction alert</td><td>The trigger detects a dangerous drug pair.</td></tr>
+    <tr><td>8.5</td><td>Pharmacovigilance similarity result</td><td>Vector search retrieves differently worded narratives.</td></tr>
+    <tr><td>8.6</td><td>Admin dashboard</td><td>Admin counts, drug catalogue, interactions and audit logs are protected by role.</td></tr>
+    <tr><td>8.7</td><td>403 authorization demonstration</td><td>A disallowed role is rejected by the API.</td></tr>
+  </table>
+  <div class="figure">Insert application screenshots and code excerpts here</div>
+  <p class="placeholder">Do not include passwords, DATABASE_URL, SESSION_SECRET or .env.local in screenshots.</p>
+
+  <h2>9. Evaluation Rubrics — Completion Status</h2>
+  <table>
+    <tr><th>Rubric area</th><th>Completion evidence</th><th>Status</th></tr>
+    <tr><td>Relational schema</td><td>Tables, PKs, FKs, UNIQUE and CHECK constraints</td><td>[Completed / Pending]</td></tr>
+    <tr><td>Advanced SQL</td><td>Triggers, stored functions, views and indexes</td><td>[Completed / Pending]</td></tr>
+    <tr><td>Concurrent booking</td><td>Exactly one conflicting booking succeeds</td><td>[Test result]</td></tr>
+    <tr><td>Drug interaction detection</td><td><code>interaction_alert</code> with severity</td><td>[Test result]</td></tr>
+    <tr><td>Reminder queue</td><td>Patient and doctor reminder rows</td><td>[Test result]</td></tr>
+    <tr><td>Vector component</td><td>Embeddings, cosine search and similarity result</td><td>[Test result]</td></tr>
+    <tr><td>Security</td><td>bcrypt, sessions, parameterized queries and role guards</td><td>[Completed / Pending]</td></tr>
+    <tr><td>Frontend</td><td>Four role-specific workflows</td><td>[Completed / Pending]</td></tr>
+    <tr><td>Testing</td><td>Actual outputs and screenshots in <code>docs/test-results.md</code></td><td>[Completed / Pending]</td></tr>
+    <tr><td>Documentation</td><td>ER diagram, relational schema, report and screenshots</td><td>[Completed / Pending]</td></tr>
+  </table>
+
+  <h3>Conclusion</h3>
+  <p>Nidaan combines relational correctness with vector-based semantic
+  discovery. PostgreSQL protects the clinical workflow, triggers and
+  functions automate database behaviour, and pgvector helps the
+  pharmacovigilance role discover adverse-event patterns beyond exact
+  keyword matching.</p>
+</body>
+</html>
