@@ -29,7 +29,7 @@ export default async function AdminPage() {
         [1],
       ),
       pool.query<CountRow>(
-        "SELECT COUNT(*)::text AS count FROM audit_log WHERE audit_id >= $1",
+        "SELECT COUNT(*)::text AS count FROM audit_log WHERE log_id >= $1",
         [1],
       ),
     ]);
