@@ -184,6 +184,18 @@ export default async function PrescriptionsPage({
           <p style={{ margin: "10px 0 0", color: "#596579", lineHeight: 1.6 }}>
             Choose one of your consultations, then add its prescribed medicines.
           </p>
+          <a
+            href="/doctor/ade-report"
+            style={{
+              display: "inline-block",
+              marginTop: 12,
+              color: "#3157a4",
+              fontWeight: 700,
+              textUnderlineOffset: 3,
+            }}
+          >
+            Report an adverse event
+          </a>
         </header>
         <Suspense fallback={<LoadingBuilder />}>
           <BuilderOptions

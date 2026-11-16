@@ -168,6 +168,9 @@ test(
       const dashboardHtml = await dashboardResponse.text();
       assert.match(dashboardHtml, new RegExp(`href="/doctor/consult/${appointmentId}"`));
       assert.match(dashboardHtml, /Start consultation/);
+      assert.match(dashboardHtml, /href="\/doctor\/ade-report"/);
+      assert.match(dashboardHtml, /Report an adverse drug event/);
+      assert.match(dashboardHtml, /Prescribers can report suspected medication reactions\./);
       assert.doesNotMatch(
         dashboardHtml,
         new RegExp(`href="/doctor/consult/${foreignAppointmentId}"`),
@@ -244,6 +247,8 @@ test(
       );
       assert.equal(builderResponse.status, 200);
       const builderHtml = (await builderResponse.text()).replace(/<!-- -->/g, "");
+      assert.match(builderHtml, /href="\/doctor\/ade-report"/);
+      assert.match(builderHtml, /Report an adverse event/);
       assert.ok(
         builderHtml.includes(`Consultation #${consultationId}`) &&
           builderHtml.includes(`Appointment #${appointmentId}`),

@@ -250,6 +250,26 @@ export default async function DoctorPage() {
           >
             Open prescription builder
           </a>
+          <a
+            href="/doctor/ade-report"
+            style={{
+              display: "block",
+              maxWidth: 520,
+              marginTop: 12,
+              border: "1px solid #cbd5e1",
+              borderRadius: 10,
+              background: "#fff",
+              color: "#244b91",
+              padding: "12px 16px",
+              fontWeight: 700,
+              textDecoration: "none",
+            }}
+          >
+            <span style={{ display: "block" }}>Report an adverse drug event</span>
+            <span style={{ display: "block", marginTop: 4, color: "#596579", fontSize: 14, fontWeight: 400 }}>
+              Prescribers can report suspected medication reactions.
+            </span>
+          </a>
         </header>
         <Suspense fallback={<LoadingSchedule />}>
           <UpcomingSchedule userId={session.userId} />

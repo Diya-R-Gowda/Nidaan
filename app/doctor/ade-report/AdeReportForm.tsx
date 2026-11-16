@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 type PatientOption = { patient_id: number; full_name: string };
 type ItemOption = {
@@ -32,10 +32,22 @@ export default function AdeReportForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [reportId, setReportId] = useState<number | null>(null);
+  const [severityScore, setSeverityScore] = useState<number | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const selectedPatientId = Number(patientId);
   const patientItems = patientId
     ? items.filter((item) => item.patient_id === selectedPatientId)
     : [];
+
+  function submitAnotherReport() {
+    formRef.current?.reset();
+    setPatientId("");
+    setItemId("");
+    setError("");
+    setReportId(null);
+    setSeverityScore(null);
+    formRef.current?.querySelector<HTMLSelectElement>("#patientId")?.focus();
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,12 +70,14 @@ export default function AdeReportForm({
     ) {
       setError("Check the selected records, onset date, and narrative length.");
       setReportId(null);
+      setSeverityScore(null);
       return;
     }
 
     setIsSubmitting(true);
     setError("");
     setReportId(null);
+    setSeverityScore(null);
 
     try {
       const response = await fetch("/api/ade-reports", {
@@ -79,6 +93,8 @@ export default function AdeReportForm({
 
       if (response.ok && responseRecord && Number.isSafeInteger(responseRecord.reportId)) {
         setReportId(responseRecord.reportId as number);
+        const score = Number(responseRecord.severityScore);
+        setSeverityScore(Number.isFinite(score) ? score : null);
         form.reset();
         setPatientId("");
         setItemId("");
@@ -101,8 +117,26 @@ export default function AdeReportForm({
   return (
     <>
       {error && <p role="alert" style={{ border: "1px solid #fecaca", borderRadius: 10, background: "#fff7f7", padding: 14, color: "#a32020" }}>{error}</p>}
-      {reportId !== null && <p role="status" style={{ border: "1px solid #bbf7d0", borderRadius: 10, background: "#f0fdf4", padding: 14, color: "#067647" }}>Adverse-event report #{reportId} was submitted.</p>}
-      <form onSubmit={handleSubmit}>
+      {reportId !== null && (
+        <section aria-labelledby="ade-success-title" style={{ border: "1px solid #bbf7d0", borderRadius: 10, background: "#f0fdf4", padding: 14, color: "#067647", marginBottom: 16 }}>
+          <p id="ade-success-title" role="status" aria-live="polite" style={{ margin: "0 0 6px", fontWeight: 700 }}>
+            ADE report submitted successfully.
+          </p>
+          <p style={{ margin: 0 }}>Report ID: #{reportId}</p>
+          <p style={{ margin: "6px 0 0" }}>
+            Severity score (automated heuristic): {severityScore === null ? "not available" : severityScore.toFixed(2)}
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14, marginTop: 12 }}>
+            <a href="/doctor" style={{ color: "#244b91", fontWeight: 700, textUnderlineOffset: 3 }}>
+              Return to Doctor Dashboard
+            </a>
+            <button type="button" onClick={submitAnotherReport} style={{ minHeight: 42, border: "1px solid #067647", borderRadius: 8, background: "#fff", color: "#067647", padding: "8px 12px", font: "inherit", fontWeight: 700, cursor: "pointer" }}>
+              Submit another ADE report
+            </button>
+          </div>
+        </section>
+      )}
+      <form ref={formRef} onSubmit={handleSubmit}>
         <div style={{ display: "grid", gap: 16 }}>
           <label htmlFor="patientId" style={{ display: "grid", gap: 6, fontWeight: 600 }}>Patient
             <select
@@ -142,6 +176,12 @@ export default function AdeReportForm({
           <label htmlFor="onsetDate" style={{ display: "grid", gap: 6, fontWeight: 600 }}>Symptom onset date<input id="onsetDate" name="onsetDate" type="date" required style={fieldStyle} /></label>
           <label htmlFor="narrative" style={{ display: "grid", gap: 6, fontWeight: 600 }}>Narrative<textarea id="narrative" name="narrative" minLength={20} required rows={6} aria-describedby="narrative-hint" style={{ ...fieldStyle, minHeight: 150, resize: "vertical" }} /></label>
           <p id="narrative-hint" style={{ margin: "-10px 0 0", color: "#596579", fontSize: 13 }}>Describe the reported event in at least 20 characters.</p>
+          <label htmlFor="severityScore" style={{ display: "grid", gap: 6, fontWeight: 600 }}>
+            Severity (calculated)
+            <output id="severityScore" aria-live="polite" style={{ color: "#596579", fontWeight: 400 }}>
+              {severityScore === null ? "Calculated automatically after submission." : severityScore.toFixed(2)}
+            </output>
+          </label>
         </div>
         <button type="submit" disabled={isSubmitting} aria-busy={isSubmitting} style={{ marginTop: 18, minHeight: 42, border: 0, borderRadius: 9, background: isSubmitting ? "#8196c2" : "#3157a4", color: "#fff", padding: "10px 16px", font: "inherit", fontWeight: 700, cursor: isSubmitting ? "wait" : "pointer" }}>{isSubmitting ? "Submitting…" : "Submit report"}</button>
         <p role="status" aria-live="polite" style={{ minHeight: 20, margin: "10px 0 0", color: "#596579", fontSize: 13 }}>{isSubmitting ? "Submitting report…" : ""}</p>

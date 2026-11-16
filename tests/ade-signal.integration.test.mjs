@@ -40,6 +40,9 @@ test(
     let receptionistId;
     let pvUserId;
     let syntheticDrugId;
+    let foreignDoctorUserId;
+    let foreignDoctorId;
+    let foreignPatientId;
     const patientIds = [];
     const appointmentIds = [];
     const consultationIds = [];
@@ -81,6 +84,43 @@ test(
       `);
       assert.ok(accountRows.rows[0], "Seeded prescriber, receptionist, and PV account are required");
       ({ doctor_id: doctorId, receptionist_id: receptionistId, pv_user_id: pvUserId } = accountRows.rows[0]);
+
+      const foreignDoctorUser = await client.query(
+        `INSERT INTO user_account (email, password_hash, full_name, role, is_active)
+         VALUES ($1, $2, $3, 'prescriber', TRUE)
+         RETURNING user_id`,
+        [
+          `SYNTHETIC TEST ONLY foreign prescriber ${suffix}@example.invalid`,
+          "synthetic-test-only-unused-password-hash",
+          "SYNTHETIC TEST ONLY foreign prescriber",
+        ],
+      );
+      foreignDoctorUserId = foreignDoctorUser.rows[0].user_id;
+      const foreignDoctor = await client.query(
+        `INSERT INTO doctor (user_id, registration_no, specialisation, consultation_fee)
+         VALUES ($1, $2, $3, 0)
+         RETURNING doctor_id`,
+        [foreignDoctorUserId, `SYN-ADE-${suffix}`, "Synthetic test specialty"],
+      );
+      foreignDoctorId = foreignDoctor.rows[0].doctor_id;
+      const foreignPatient = await client.query(
+        `INSERT INTO patient (full_name, date_of_birth, sex, phone, email)
+         VALUES ($1, '1990-01-01', 'unspecified', '0000000000', $2)
+         RETURNING patient_id`,
+        [
+          `SYNTHETIC TEST ONLY foreign patient ${suffix.slice(0, 8)}`,
+          `ade-foreign-patient-${suffix}@example.invalid`,
+        ],
+      );
+      foreignPatientId = foreignPatient.rows[0].patient_id;
+      const foreignAppointment = await client.query(
+        `INSERT INTO appointment
+           (patient_id, doctor_id, created_by, slot_start, slot_end, mode, status)
+         VALUES ($1, $2, $3, now(), now() + INTERVAL '30 minutes', 'in_person', 'booked')
+         RETURNING appointment_id`,
+        [foreignPatientId, foreignDoctorId, receptionistId],
+      );
+      appointmentIds.push(foreignAppointment.rows[0].appointment_id);
 
       const drug = await client.query(
         `INSERT INTO drug (drug_name, generic_name, drug_class, form, strength, unit_price, is_active)
@@ -172,6 +212,14 @@ test(
       const prescriberCookie = await login("prescriber@nidaan.local", prescriberPassword);
       const pvCookie = await login("pharmacovigilance@nidaan.local", pvPassword);
 
+      const adePage = await fetch(`${apiBase}/doctor/ade-report`, {
+        headers: { Cookie: prescriberCookie },
+      });
+      assert.equal(adePage.status, 200);
+      const adePageHtml = await adePage.text();
+      assert.ok(adePageHtml.includes(`SYNTHETIC TEST ONLY ADE patient ${suffix.slice(0, 8)}-0`));
+      assert.ok(!adePageHtml.includes(`SYNTHETIC TEST ONLY foreign patient ${suffix.slice(0, 8)}`));
+
       const seedPair = await client.query(
         `SELECT gums.report_id AS gums_id, brushing.report_id AS brushing_id
          FROM ade_report AS gums
@@ -199,6 +247,25 @@ test(
         false,
         "Full-text comparison should not match the differently worded seed report",
       );
+      const seedVectorExample = await fetch(
+        `${apiBase}/api/ade-reports/${seedPair.rows[0].gums_id}/similar?mode=vector`,
+        { headers: { Cookie: pvCookie } },
+      );
+      assert.equal(seedVectorExample.status, 200);
+      const seedVectorBody = await seedVectorExample.json();
+      assert.ok(seedVectorBody.neighbours.length <= 10);
+      assert.equal(
+        seedVectorBody.neighbours.some((row) => row.report_id === seedPair.rows[0].gums_id),
+        false,
+        "Vector comparison should exclude the seed source report",
+      );
+      assert.ok(
+        seedVectorBody.neighbours.some((row) => row.report_id === seedPair.rows[0].brushing_id),
+        "Vector comparison should retrieve the related seed report without an uncalibrated score floor",
+      );
+      assert.ok(
+        seedVectorBody.neighbours.every((row) => Number.isFinite(Number(row.cosine_similarity))),
+      );
 
       const anonymousPost = await postReport(null, {
         patientId: patientIds[0], itemId: itemIds[0], onsetDate: "2026-11-01",
@@ -220,6 +287,11 @@ test(
       });
       assert.equal(shortNarrative.response.status, 400);
 
+      const emptyNarrative = await postReport(prescriberCookie, {
+        patientId: patientIds[0], itemId: itemIds[0], onsetDate: "2026-11-01", narrative: "",
+      });
+      assert.equal(emptyNarrative.response.status, 400);
+
       const invalidDate = await postReport(prescriberCookie, {
         patientId: patientIds[0], itemId: itemIds[0], onsetDate: "2026-02-30",
         narrative: "SYNTHETIC TEST ONLY: invalid date must not create a report.",
@@ -231,6 +303,12 @@ test(
         narrative: "SYNTHETIC TEST ONLY: unrelated item must not be accepted.",
       });
       assert.equal(unrelatedItem.response.status, 404);
+
+      const otherPrescribersPatient = await postReport(prescriberCookie, {
+        patientId: foreignPatientId, itemId: null, onsetDate: "2026-11-01",
+        narrative: "SYNTHETIC TEST ONLY: another prescriber's patient must be rejected.",
+      });
+      assert.equal(otherPrescribersPatient.response.status, 404);
 
       const narratives = [
         "SYNTHETIC TEST ONLY: a fictional patient developed an itchy red rash after taking the test tablet.",
@@ -395,6 +473,9 @@ test(
           if (consultationIds.length) await client.query("DELETE FROM consultation WHERE consultation_id = ANY($1::int[])", [consultationIds]);
           if (appointmentIds.length) await client.query("DELETE FROM appointment WHERE appointment_id = ANY($1::int[])", [appointmentIds]);
           if (patientIds.length) await client.query("DELETE FROM patient WHERE patient_id = ANY($1::int[])", [patientIds]);
+          if (foreignPatientId) await client.query("DELETE FROM patient WHERE patient_id = $1", [foreignPatientId]);
+          if (foreignDoctorId) await client.query("DELETE FROM doctor WHERE doctor_id = $1", [foreignDoctorId]);
+          if (foreignDoctorUserId) await client.query("DELETE FROM user_account WHERE user_id = $1", [foreignDoctorUserId]);
           if (syntheticDrugId) await client.query("DELETE FROM drug WHERE drug_id = $1", [syntheticDrugId]);
           await client.query("COMMIT");
         } catch (error) {
